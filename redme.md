@@ -1,0 +1,1 @@
+bunx @tailwindcss/cli -i ./style/input.css -o ./style/style.css --watch
