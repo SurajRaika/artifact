@@ -46,7 +46,7 @@ if (!isset($slot)) {
 
 <head>
     <?php $title = $page_title;
-    include '../components/global/head.php'; // HEADER COMPONENT 
+    include '../app/components/global/head.php'; // HEADER COMPONENT 
     ?>
 
 
