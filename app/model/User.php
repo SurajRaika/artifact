@@ -55,7 +55,7 @@ class User
             mysqli_stmt_bind_param($stmt, "sss", $username, $email, $hashed_password);
 
             if (mysqli_stmt_execute($stmt)) {
-                $this->redirect('./login.php',"Registration successful. Please log in.");
+                $this->redirect('./authenticate',"Registration successful. Please log in.");
             }
         }
 
@@ -94,7 +94,7 @@ class User
             }
         }
 
-        $this->redirectWithError('./login.php');
+        $this->redirectWithError('./authenticate');
     }
 
     private function redirect($location,$message)

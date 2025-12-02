@@ -1,7 +1,7 @@
 <?php
-
-require_once "../app/controllers/authenticator_controller.php";
-require_once "../app/authentication/index.php";
+// authenticate/index.php , but if i visit the web i can get same by /authenticate
+// The required file below now sets $page and $page_title before being included
+require_once "../app/authentication/index.php"; 
 
 
 
@@ -9,6 +9,44 @@ require_once "../app/authentication/index.php";
 if (!isset($slot)) {
     $slot = '';
 }
+
+// *** New: Server-side message check ***
+// This function determines the server-side message to display.
+function getAuthMessage() {
+    global $user_email_err, $password_err, $confirm_password_err, $login_err, $registration_err, $page;
+    
+    // Check for success messages first (e.g., after a successful registration redirect)
+    if (isset($_GET['success']) && $_GET['success'] === 'registered') {
+        return ['type' => 'success', 'message' => 'Registration complete. Please log in.'];
+    }
+
+    // Check for errors (only set if form was POSTed and validation failed)
+    // The global error variables are set in LoginManager.php or RegisterManager.php
+    $errors = [];
+    if (!empty($user_email_err)) $errors[] = $user_email_err;
+    
+    // The password error variable name changes based on the mode
+    $current_password_err = ($page === 'register') ? $user_password_err : $password_err;
+    if (!empty($current_password_err)) $errors[] = $current_password_err;
+    
+    if ($page === 'register' && !empty($confirm_password_err)) $errors[] = $confirm_password_err;
+    
+    // Check main process errors (login_err or registration_err)
+    $main_err = ($page === 'register') ? $registration_err : $login_err;
+    if (!empty($main_err)) $errors[] = $main_err;
+
+    if (!empty($errors)) {
+        return ['type' => 'error', 'message' => implode(' | ', $errors)];
+    }
+
+    // Default message when nothing has happened
+    return ['type' => 'info', 'message' => 'Enter your credentials to continue.']; 
+}
+
+$message_data = getAuthMessage();
+
+// If we have an error, we need to make sure the email/password fields are pre-filled 
+// with the POSTed values to be user-friendly.
 
 ?>
 <!DOCTYPE html>
@@ -51,18 +89,30 @@ if (!isset($slot)) {
                 <?php echo $page_title; // Dynamically set title 
                 ?>
             </h1>
-
-            <div id="message-area" class="brutalist-border border-2 p-3 mb-4 font-mono text-sm ">
-                sadf
+            
+            <div id="message-area" class="brutalist-border border-2 p-3 mb-4 font-mono text-sm 
+                <?php 
+                    $message_class = '';
+                    if ($message_data['type'] === 'error') {
+                        $message_class = 'bg-red-100 border-red-600 text-red-700';
+                    } elseif ($message_data['type'] === 'success') {
+                        $message_class = 'bg-green-100 border-green-600 text-green-700';
+                    } else {
+                        // Default/info message is visible with no color classes
+                    }
+                    echo $message_class;
+                ?>">
+                <?php echo $message_data['message']; // Display the message 
+                ?>
             </div>
 
-            <form id="auth-form" onsubmit="event.preventDefault(); handleSubmit();" class="space-y-4">
+            <form id="auth-form" method="POST" action="" class="space-y-4"> 
 
                 <div>
                     <label for="email" class="block text-xs font-bold uppercase mb-1">Email / User ID</label>
                     <input type="email" id="email" name="user_email" required
-                        class="brutalist-input" placeholder="user@domain.com">
-                </div>
+                        class="brutalist-input" placeholder="user@domain.com"
+                        value="<?php echo htmlspecialchars($user_email ?? ''); ?>"> </div>
 
                 <div>
                     <label for="password" class="block text-xs font-bold uppercase mb-1">Password</label>
@@ -121,93 +171,23 @@ if (!isset($slot)) {
     </div>
 
     <script>
-        // State Management - Initialize JS state based on PHP's $page variable
-        let currentMode = '<?php echo $page; ?>'; // 'login' or 'register'
-
-        // DOM Elements
-        const authTitle = document.getElementById('auth-title');
+        // *** Simplified Client-Side JS ***
+        // The core authentication is now handled by PHP via a standard form POST.
+        // The original JS functions (handleLogin/handleSignup) have been removed.
+        // This script now only focuses on client-side visual management if needed, 
+        // but the PHP logic is the authoritative source for mode and messages.
+        
         const messageArea = document.getElementById('message-area');
-        // Note: confirmPasswordGroup is primarily managed by PHP now, but the input is still needed for JS validation
-        const confirmPasswordInput = document.getElementById('confirm-password');
-        const submitButton = document.getElementById('submit-button');
-        const togglePrompt = document.getElementById('toggle-prompt');
-        const toggleButton = document.getElementById('toggle-button');
-        const emailInput = document.getElementById('email');
-        const passwordInput = document.getElementById('password');
-
-
-        /**
-         * Displays a notification message.
-         * @param {string} type - 'success' or 'error'
-         * @param {string} message - The message content.
-         */
-        function showMessage(type, message) {
-            messageArea.textContent = message;
-            messageArea.classList.remove('hidden', 'bg-red-100', 'border-red-600', 'text-red-700', 'bg-green-100', 'border-green-600', 'text-green-700');
-
-            if (type === 'error') {
-                messageArea.classList.add('bg-red-100', 'border-red-600', 'text-red-700');
-            } else if (type === 'success') {
-                messageArea.classList.add('bg-green-100', 'border-green-600', 'text-green-700');
-            }
-        }
-
-        /**
-         * Clears the notification message.
-         */
-        function clearMessage() {
-            messageArea.textContent = '';
+        
+        // Function to make sure the message area is visible if it contains content other than the default.
+        if (messageArea.textContent.trim() !== 'Enter your credentials to continue.') {
+            // Note: The visibility is now largely controlled by PHP class-setting, 
+            // but this is a fail-safe to ensure it's not accidentally hidden.
+            messageArea.classList.remove('hidden'); 
+        } else {
+            // If it's just the default message, hide it until an action happens
             messageArea.classList.add('hidden');
-            messageArea.className = 'brutalist-border border-2 p-3 mb-4 font-mono text-sm hidden'; // Reset classes
         }
-
-        /**
-         * Handles the form submission based on the current mode.
-         */
-        function handleSubmit() {
-            clearMessage();
-            const email = emailInput.value;
-            const password = passwordInput.value;
-
-            // Use currentMode initialized by PHP
-            if (currentMode === 'login') {
-                handleLogin(email, password);
-            } else {
-                // Ensure confirmPasswordInput exists (it does, even if hidden by PHP)
-                const confirmPassword = confirmPasswordInput ? confirmPasswordInput.value : '';
-                handleSignup(email, password, confirmPassword);
-            }
-        }
-
-        // --- Mock Authentication Handlers ---
-
-        function handleLogin(email, password) {
-            // Mock Error:
-            showMessage('error', 'Mock Error: Authentication failed. Check credentials.');
-
-            // Mock Success condition:
-            if (email.toLowerCase().includes('success')) {
-                showMessage('success', 'Login successful! Redirecting...');
-                // In a real app: window.location.href = 'index.html';
-            }
-        }
-
-        function handleSignup(email, password, confirmPassword) {
-            if (password !== confirmPassword) {
-                showMessage('error', 'Passwords do not match.');
-                return;
-            }
-
-            // Mock registration is always successful
-            showMessage('success', 'Registration successful. Please wait...');
-
-            // In a real app, you might redirect after success:
-            // setTimeout(() => {
-            //     window.location.href = 'base.php?action=login'; 
-            // }, 2000);
-        }
-
-        // Initial setup - The PHP sets the initial state, no need for complex JS init logic.
     </script>
 
 </body>

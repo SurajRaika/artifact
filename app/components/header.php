@@ -50,9 +50,13 @@
                     <ul id="transaction-list" class="space-y-2 text-xs font-mono">
                     </ul>
                     <button
-                        class="w-full mt-4 bg-black text-white py-2 text-xs font-bold uppercase hover:bg-gray-800 brutalist-shadow-sm brutalist-active brutalist-border">
+                        class="w-full mt-4 bg-black text-white py-2 text-xs font-bold uppercase hover:bg-gray-800 brutalist-shadow-sm brutalist-active cursor-pointer brutalist-border">
                         View Full History
                     </button>
+            <button onclick="window.location.href='/authenticate?action=register'"
+        class="w-full mt-4 hover:bg-red-600 text-black py-2 text-xs font-bold uppercase cursor-pointer border-red-300 brutalist-shadow-sm brutalist-active brutalist-border">
+    Log OUT
+</button>
                 </div>
             </div>
 
