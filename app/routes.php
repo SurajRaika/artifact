@@ -6,7 +6,7 @@ $router->get('', function () {
                 require 'home.php';
 
             }else{
-        require 'home.php';
+        require 'Landing_page.php';
     }
 
 });

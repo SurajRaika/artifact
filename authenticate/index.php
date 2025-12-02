@@ -1,33 +1,8 @@
 <?php
-// base.php
-// If the current file is loaded directly (not included)
 
-// Start the session (essential for session_destroy to work)
-session_start();
+require_once "../app/controllers/authenticator_controller.php";
+require_once "../app/authentication/index.php";
 
-$page = $_GET['action'] ?? 'login';  // default state
-
-$page_title = "Access Terminal";
-
-
-switch ($page) {
-    case 'login':
-        $page_title = "Access Terminal";
-        break; // Stop execution here
-    case 'register':
-        $page_title = "Create New Account";
-        break; // Stop execution here
-    case 'logout':
-        session_destroy();
-        // Redirect to login after logout
-        header('Location: base.php?action=login');
-        exit;
-    default:
-        // Handle invalid 'action' values, default to login
-        $page = 'login';
-        $page_title = "Access Terminal";
-        break;
-};
 
 
 // Ensure $slot is defined, or set it to an empty string to prevent errors
@@ -77,14 +52,15 @@ if (!isset($slot)) {
                 ?>
             </h1>
 
-            <div id="message-area" class="brutalist-border border-2 p-3 mb-4 font-mono text-sm hidden">
+            <div id="message-area" class="brutalist-border border-2 p-3 mb-4 font-mono text-sm ">
+                sadf
             </div>
 
             <form id="auth-form" onsubmit="event.preventDefault(); handleSubmit();" class="space-y-4">
 
                 <div>
                     <label for="email" class="block text-xs font-bold uppercase mb-1">Email / User ID</label>
-                    <input type="email" id="email" name="email" required
+                    <input type="email" id="email" name="user_email" required
                         class="brutalist-input" placeholder="user@domain.com">
                 </div>
 
