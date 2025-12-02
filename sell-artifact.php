@@ -61,13 +61,13 @@ ob_start(); ?>
                         onchange="handleFiles(this.files)">
                 </div>
 
-                <div id="file-list" class="mt-3 space-y-1 p-2 brutalist-border bg-white">
-                    <p class="text-xs text-gray-500 font-mono" id="file-list-placeholder">No files selected.</p>
-                </div>
+                <div id="file-list" class="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3">
+                    </div>
+                <div id="file-list-placeholder" class="mt-2 text-xs text-gray-500 font-mono">No files selected.</div>
             </div>
 
-            <button onclick="submitAppraisal()"
-                class="w-full bg-black text-white py-3 font-bold uppercase tracking-widest hover:bg-red-600 transition-all brutalist-shadow brutalist-active border-2 border-black mt-4">
+            <button id="submit-btn" onclick="submitAppraisal()"
+                class="w-full bg-black text-white py-3 font-bold uppercase tracking-widest hover:bg-red-600 transition-all brutalist-shadow brutalist-active border-2 border-black mt-4 disabled:bg-gray-400 disabled:cursor-not-allowed">
                 Submit for Appraisal
             </button>
         </div>
@@ -111,9 +111,6 @@ ob_start(); ?>
         border-color: black;
     }
 
-
-
-    /* Custom CSS for the toggle switch */
     .toggle-checkbox:checked {
         right: 0;
         border-color: black;
@@ -121,72 +118,98 @@ ob_start(); ?>
 
     .toggle-checkbox {
         right: 1.25rem;
-        /* Equivalent to mr-2 (0.5rem) + width-of-checkbox (1.5rem) - width-of-label-margin-difference */
         top: -1px;
-        /* Adjusting for border */
         transition: right 0.1s ease-in-out, background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
     }
 
     .toggle-checkbox:checked+.toggle-label {
         background-color: black;
-        /* green-500 */
     }
 </style>
 
 <script>
     function initSellArtifact() {
-        // Since uploadedFiles is a global state, call renderFileList on load
         renderFileList();
         setupDragAndDrop();
-        resetAppraisalForm(); // Ensure correct container is shown initially
+        resetAppraisalForm(); 
 
-        // Initialize the toggle state on load/reset
         document.getElementById('is-private-sale').checked = false;
         toggleSecretCodeField();
     }
 
     // --- Drag and Drop Handlers ---
     function handleFiles(files) {
-        // uploadedFiles is a global variable from app/components/layouts/base.php
-        uploadedFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+        // Filter and append new files to the global array
+        const newFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+        uploadedFiles = [...uploadedFiles, ...newFiles];
+        
+        // Limit to 5 files
+        if(uploadedFiles.length > 5) {
+            uploadedFiles = uploadedFiles.slice(0, 5);
+            showToast('Max 5 images allowed.', 'alert-circle', 'red');
+        }
+        
         renderFileList();
     }
 
     function renderFileList() {
         const list = document.getElementById('file-list');
+        const placeholder = document.getElementById('file-list-placeholder');
         list.innerHTML = '';
 
         if (uploadedFiles.length === 0) {
-            list.innerHTML = '<p class="text-xs text-gray-500 font-mono" id="file-list-placeholder">No files selected.</p>';
+            placeholder.classList.remove('hidden');
             return;
+        } else {
+            placeholder.classList.add('hidden');
         }
 
-        uploadedFiles.forEach(file => {
+        uploadedFiles.forEach((file, index) => {
+            const imgSrc = URL.createObjectURL(file);
             const sizeKB = (file.size / 1024).toFixed(1);
+            
             list.innerHTML += `
-                <div class="flex justify-between items-center text-xs font-mono">
-                    <span><i data-lucide="file-text" class="w-3 h-3 inline mr-1"></i>${file.name}</span>
-                    <span class="text-gray-600">${sizeKB} KB</span>
-                </div>
+           <div class="relative group brutalist-border bg-gray-50 p-1">
+    <div class="h-32 flex items-center justify-center overflow-hidden">
+        <img 
+          src="${imgSrc}" 
+          class="max-h-full max-w-full object-contain border border-gray-200" 
+        >
+    </div>
+
+    <div class="mt-1 flex justify-between items-center px-1">
+        <span class="text-[10px] font-mono truncate w-20">${file.name}</span>
+        <button onclick="removeFile(${index})" class="text-red-600 hover:bg-red-100 p-1 rounded">
+            <i data-lucide="trash-2" class="w-3 h-3"></i>
+        </button>
+    </div>
+</div>
+
+
             `;
         });
         lucide.createIcons();
     }
 
+    function removeFile(index) {
+        uploadedFiles.splice(index, 1);
+        renderFileList();
+    }
+
     function setupDragAndDrop() {
         const dropArea = document.getElementById('drop-area');
-        if (!dropArea) return; // Guard for other pages
+        if (!dropArea) return; 
 
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropArea.addEventListener(eventName, preventDefaults, false);
         });
 
         ['dragenter', 'dragover'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => dropArea.classList.add('drag-over'), false);
+            dropArea.addEventListener(eventName, () => dropArea.classList.add('bg-gray-200'), false);
         });
 
         ['dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => dropArea.classList.remove('drag-over'), false);
+            dropArea.addEventListener(eventName, () => dropArea.classList.remove('bg-gray-200'), false);
         });
 
         dropArea.addEventListener('drop', handleDrop, false);
@@ -203,11 +226,48 @@ ob_start(); ?>
         }
     }
 
-    // --- New Toggle Logic ---
+    // --- Image Processing Logic (Resize & Base64) ---
+    function processImage(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Resize logic
+                    const maxWidth = 400;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > maxWidth) {
+                        height = Math.round(height * (maxWidth / width));
+                        width = maxWidth;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    // Draw image on canvas
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Convert to Base64
+                    const dataUrl = canvas.toDataURL(file.type); // Keeps original MIME type (png/jpg)
+                    resolve(dataUrl);
+                };
+                img.onerror = (err) => reject(err);
+            };
+            reader.onerror = (err) => reject(err);
+        });
+    }
+
+    // --- Toggle Logic ---
     function toggleSecretCodeField() {
         const isPrivate = document.getElementById('is-private-sale').checked;
         const codeField = document.getElementById('secret-code-field');
-        // Select both input fields
         const codeInput = document.getElementById('private-sale-code');
         const confirmCodeInput = document.getElementById('confirm-private-sale-code');
 
@@ -216,58 +276,114 @@ ob_start(); ?>
             codeInput.focus();
         } else {
             codeField.classList.add('hidden');
-            codeInput.value = ''; // Clear the code when switching back to public
-            confirmCodeInput.value = ''; // Clear the confirmation code
+            codeInput.value = '';
+            confirmCodeInput.value = '';
         }
     }
 
+    function updateVisibility(artifactId, newVisibility) {
+        const formData = new FormData();
+        formData.append("artifact_id", artifactId);
+        formData.append("visibility", newVisibility);
+
+        fetch("/api/update_artifact_visibility.php", {
+            method: "POST",
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                console.log("Updated!");
+            } else {
+                console.error("Failed:", data.message);
+            }
+        })
+        .catch(err => console.error("Error:", err));
+    }
+
     // --- Submission Logic ---
-    function submitAppraisal() {
+    async function submitAppraisal() {
         const title = document.getElementById('artifact-title').value.trim();
         const description = document.getElementById('artifact-description').value.trim();
         const isPrivate = document.getElementById('is-private-sale').checked;
         const privateCode = document.getElementById('private-sale-code').value.trim();
-        const confirmPrivateCode = document.getElementById('confirm-private-sale-code').value.trim(); // Get confirmation code
+        const confirmPrivateCode = document.getElementById('confirm-private-sale-code').value.trim();
+        const submitBtn = document.getElementById('submit-btn');
 
         if (!title || !description || uploadedFiles.length === 0) {
             showToast('Please fill in all fields and upload at least one image.', 'x-circle', 'red');
             return;
         }
 
-        const codeRegex = /^\d{6}$/; // Exactly 6 digits
+        const codeRegex = /^\d{6}$/; 
         if (isPrivate) {
             if (!privateCode || !confirmPrivateCode || !codeRegex.test(privateCode) || !codeRegex.test(confirmPrivateCode)) {
-                showToast('Please enter a valid 6-digit Secret Access Code in both fields for a private sale.', 'x-circle', 'red');
+                showToast('Please enter a valid 6-digit Secret Access Code.', 'x-circle', 'red');
                 return;
             }
             if (privateCode !== confirmPrivateCode) {
-                showToast('Secret Access Code and confirmation code do not match.', 'x-circle', 'red');
+                showToast('Secret codes do not match.', 'x-circle', 'red');
                 return;
             }
         }
 
-        // Simulate submission process
-        const formContainer = document.getElementById('appraisal-form-container');
-        const statusContainer = document.getElementById('appraisal-status-container');
+        // Disable button to prevent double submit
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Processing Images...";
 
-        // In a real application, you would send title, description, isPrivate, privateCode, and files to the server.
-        // console.log("Submitting:", { title, description, isPrivate, privateCode });
+        try {
+            // Process all images to 400px Base64
+            const base64Images = await Promise.all(uploadedFiles.map(file => processImage(file)));
 
-        formContainer.classList.add('hidden');
-        statusContainer.classList.remove('hidden');
+            const formData = new FormData();
+            formData.append('name', title);
+            formData.append('description', description);
+            formData.append('is_private', isPrivate ? 1 : 0);
+            formData.append('password', privateCode);
+            formData.append('confirm_password', confirmPrivateCode);
+            
+            // Append Base64 strings as an array
+            base64Images.forEach((b64, index) => {
+                formData.append('images[]', b64);
+            });
 
-        showToast('Artifact submitted successfully! Check status.', 'check-circle', 'green');
+            submitBtn.innerText = "Uploading...";
+
+            const response = await fetch('/api/submit_artifact.php', {
+                method: 'POST',
+                body: formData,
+                credentials: 'include' 
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                sessionStorage.setItem('recent_artifact_tracking_id', data.tracking_id);
+                
+                // Switch Views
+                document.getElementById('appraisal-form-container').classList.add('hidden');
+                document.getElementById('appraisal-status-container').classList.remove('hidden');
+                showToast('Artifact submitted successfully!', 'check-circle', 'green');
+            } else {
+                showToast(`❌ Error: ${data.message}`);
+            }
+        } catch (error) {
+            console.error('Request failed:', error);
+            showToast('Something went wrong. Please try again.');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerText = "SUBMIT FOR APPRAISAL";
+        }
     }
 
     function launchPreConfirmed() {
-        // Simulate immediate listing
-        showToast('Artifact instantly listed at lower value. Good luck!', 'zap', 'purple');
-
-        // For demo, reset the form after "listing"
+        const tracking_id = sessionStorage.getItem('recent_artifact_tracking_id');
+        if(tracking_id) {
+            const real_id = Number(tracking_id.split("-")[2]);
+            updateVisibility(real_id, 1);
+        }
+        showToast('Artifact instantly listed at lower value.', 'zap', 'purple');
         resetAppraisalForm();
-
-        // Navigate back to live auctions to show 'new' listing if we were to implement it
-        changeView('live-auctions');
     }
 
     function resetAppraisalForm() {
@@ -275,13 +391,12 @@ ob_start(); ?>
         document.getElementById('artifact-description').value = '';
         document.getElementById('is-private-sale').checked = false;
         document.getElementById('private-sale-code').value = '';
-        document.getElementById('confirm-private-sale-code').value = ''; // Clear confirmation code
-        toggleSecretCodeField(); // Ensure code field is hidden
+        document.getElementById('confirm-private-sale-code').value = '';
+        toggleSecretCodeField();
 
         uploadedFiles = [];
         renderFileList();
 
-        // Show the form and hide the status
         document.getElementById('appraisal-form-container').classList.remove('hidden');
         document.getElementById('appraisal-status-container').classList.add('hidden');
     }

@@ -22,8 +22,10 @@ switch ($page) {
         $page_title = "Create New Account";
         require_once __DIR__ . "/RegisterManager.php";
         break;
-
     case 'logout':
+        session_start();
+        $_SESSION = [];
+        session_destroy();
         header('Location: ./');
         exit;
 

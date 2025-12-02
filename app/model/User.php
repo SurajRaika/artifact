@@ -55,7 +55,12 @@ class User
             mysqli_stmt_bind_param($stmt, "sss", $username, $email, $hashed_password);
 
             if (mysqli_stmt_execute($stmt)) {
-                $this->redirect('./authenticate',"Registration successful. Please log in.");
+                return "";
+                // $this->redirect('./authenticate',"Registration successful. Please log in.");
+            }else {
+                return " Getting Error from users model";
+
+                # code...
             }
         }
 
@@ -64,7 +69,7 @@ class User
 
    public function login($email, $password)
     {
-        $sql = "SELECT id, username, email, password FROM users WHERE email = ?";
+        $sql = "SELECT id, username, email, password , credit  FROM users WHERE email = ?";
         $stmt = mysqli_prepare($this->link, $sql);
 
         if ($stmt) {
@@ -73,7 +78,7 @@ class User
             mysqli_stmt_store_result($stmt);
 
             if (mysqli_stmt_num_rows($stmt) == 1) {
-                mysqli_stmt_bind_result($stmt, $id, $username, $email, $hashed_password);
+                mysqli_stmt_bind_result($stmt, $id, $username, $email, $hashed_password,$user_credit);
                 mysqli_stmt_fetch($stmt);
 
                 // Ensure we have a valid hash string before verifying
@@ -92,6 +97,7 @@ class User
                     $_SESSION["id"] = $id;
                     $_SESSION["username"] = $username;
                     $_SESSION["email"] = $email;
+                    $_SESSION["credit"]=$user_credit;
                     $_SESSION["loggedin"] = true;
                     
                     // Set the message cookie
@@ -112,7 +118,27 @@ class User
         return "Internal error during login process."; // Fallback, though redirectWithError exits
     }
 
-  private function redirect($location,$message) // Keep redirect for register
+  public function get_user_by_email($email)
+{
+    $sql = "SELECT id, email, password FROM users WHERE email = ? LIMIT 1";
+    $stmt = mysqli_prepare($this->link, $sql);
+
+    if (!$stmt) {
+        return null;
+    }
+
+    mysqli_stmt_bind_param($stmt, "s", $email);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+
+    if ($result && mysqli_num_rows($result) === 1) {
+        return mysqli_fetch_assoc($result);
+    }
+
+    return null;
+}
+
+    private function redirect($location,$message) // Keep redirect for register
     {
         //store message in session so that when  user go to new location there we can show that message notification
         setcookie('message', $message, time() + 600, '/');

@@ -2,7 +2,7 @@
 ob_start(); ?>
 
 <div id="private-lots-view" class="view-content p-4 md:p-8 max-w-7xl mx-auto">
-    <h1 class="text-3xl font-bold uppercase tracking-tight brutalist-border-b pb-2 mb-4">Private Lots Access</h1>
+    <h1 class="text-3xl font-bold uppercase tracking-tight brutalist-border-b text-center pb-2 mb-4">Private Lots Access</h1>
 
     <div id="private-code-form" class="max-w-xl mx-auto p-8 brutalist-border brutalist-shadow bg-white mt-10">
         <h2 class="text-xl font-bold uppercase mb-4">Enter Access Code</h2>
@@ -10,7 +10,7 @@ ob_start(); ?>
             Access to this section is restricted. Please enter the current 8-digit secure code.
         </p>
 
-        <div id="fee-warning" class="bg-red-100 text-red-700 brutalist-border border-red-300 p-3 mb-4 text-xs font-mono">
+        <div id="fee-warning" class="bg-red-100 text-red-700 brutalist-border border-red-300 p-3 mb-4 text-xs font-mono hidden">
             </div>
 
         <input type="text" id="private-code-input" placeholder="ALPHA734"
@@ -38,14 +38,12 @@ ob_start(); ?>
 
 <script>
     function initPrivateLots() {
-        // Ensure initial state is correctly rendered on load
-        updateFundsDisplay(); // To set the fee warning text initially
-
+        // No fund display update needed anymore
         const form = document.getElementById('private-code-form');
         const content = document.getElementById('private-lots-content');
         
         // This relies on the global privateAccessGranted variable from app/components/layouts/base.php
-        if (privateAccessGranted) {
+        if (typeof privateAccessGranted !== 'undefined' && privateAccessGranted) {
             form.classList.add('hidden');
             content.classList.remove('hidden');
         } else {
@@ -59,17 +57,21 @@ ob_start(); ?>
      */
     function tryPrivateCode() {
         const codeInput = document.getElementById('private-code-input');
+        const warningDiv = document.getElementById('fee-warning');
         const secretCode = codeInput.value.trim();
+        
+        // Hide previous warnings
+        warningDiv.classList.add('hidden');
+        warningDiv.innerHTML = '';
+
 
         if (secretCode.length === 0) {
-            showToast("Please enter a private access code.", 'alert-triangle', 'red');
+            warningDiv.innerHTML = 'Please enter a private access code.';
+            warningDiv.classList.remove('hidden');
             return;
         }
 
-        if (availableFunds < accessFee) {
-            showToast(`Access Denied: You need ${formatter.format(accessFee)} to attempt a code. Funds available: ${formatter.format(availableFunds)}`, 'lock', 'red');
-            return;
-        }
+        // NO FUNDS CHECK or DEDUCTION IS PERFORMED HERE
 
         // Disable button and show loading state
         const btn = document.getElementById('private-code-button');
@@ -80,42 +82,23 @@ ob_start(); ?>
         // Simulate API delay
         setTimeout(() => {
 
-            // Deduct fee and add transaction
-            availableFunds -= accessFee;
-            transactions.unshift({
-                id: Date.now(),
-                type: 'CODE ATTEMPT',
-                amount: -accessFee,
-                date: new Date().toISOString().slice(0, 10),
-                lot: null
-            });
-
-            // Trigger animation and update UI
-            animateFundsDeduction();
-            updateFundsDisplay();
-            renderTransactions(); // Refresh the profile modal transaction list
-
-            // Simulate code validation - Correct code is ALPHA734
-            const isSuccess = secretCode.toUpperCase() === 'ALPHA734';
-
-            if (isSuccess) {
-                // Success State
-                privateAccessGranted = true;
-                document.getElementById('private-code-form').classList.add('hidden');
-                document.getElementById('private-lots-content').classList.remove('hidden');
-                showToast(`Code Accepted! Welcome to the Private Lots. ${formatter.format(accessFee)} fee deducted.`, 'unlock', 'green');
-            } else {
-                // Failure State
-                showToast(`Code Attempt Failed. The code "${secretCode}" is incorrect. ${formatter.format(accessFee)} fee deducted.`, 'x-octagon', 'red');
-                codeInput.value = ''; // Clear input on failure
-                codeInput.focus();
-            }
+            // Forced Failure State for Prototype
+            const errorMessage = `ACCESS RESTRICTED: Only **verified items** are allowed. The code "${secretCode.toUpperCase()}" is **not verified or does not exist**.`;
+            
+            warningDiv.innerHTML = errorMessage;
+            warningDiv.classList.remove('hidden');
+            
+            codeInput.value = ''; // Clear input on failure
+            codeInput.focus();
 
             // Reset button
             btn.innerHTML = oldText;
             btn.disabled = false;
         }, 1500);
     }
+    
+    // Call init on load to set initial visibility (assuming this script runs after the DOM is ready)
+    document.addEventListener('DOMContentLoaded', initPrivateLots);
 </script>
 
 <?php $slot = ob_get_clean();

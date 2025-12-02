@@ -13,7 +13,7 @@ if (!isset($slot)) {
 // *** New: Server-side message check ***
 // This function determines the server-side message to display.
 function getAuthMessage() {
-    global $user_email_err, $password_err, $confirm_password_err, $login_err, $registration_err, $page;
+    global $user_email_err, $password_err, $user_password_err, $confirm_password_err, $login_err, $registration_err, $page;
     
     // Check for success messages first (e.g., after a successful registration redirect)
     if (isset($_GET['success']) && $_GET['success'] === 'registered') {
@@ -75,7 +75,7 @@ $message_data = getAuthMessage();
         <header class="mb-8 flex items-center justify-center">
             <div class="flex items-center gap-4">
                 <div class="font-bold text-2xl tracking-tight flex items-center gap-1.5">
-                    <span class="logotype text-4xl font-semibold sm:inline">AUCTION</span>
+                    <span class="logotype text-4xl font-semibold sm:inline">JODHPURARTIFACT</span>
                     <div class="bg-black text-white px-2 py-0.5 text-sm font-semibold tracking-widest brutalist-border">
                         .COM
                     </div>

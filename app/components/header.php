@@ -9,7 +9,7 @@
     <div class="h-16 bg-white flex items-center justify-between px-4 z-20 shrink-0 w-full border-b-2 border-black ">
         <div class="flex items-center gap-4">
             <div class="font-bold text-2xl tracking-tight flex items-center gap-1.5">
-                <span class="logotype text-4xl font-semibold sm:inline">AUCTION</span>
+                <span class="logotype text-4xl font-semibold sm:inline">JodhpurARTIFACT</span>
                 <div class="bg-black text-white px-2 py-0.5 text-sm font-semibold tracking-widest ">
                     .COM
                 </div>
@@ -17,21 +17,21 @@
         </div>
 
         <nav id="main-nav-desktop" class="hidden md:flex gap-6 font-medium text-sm uppercase tracking-wide">
-            <button data-view="live-auctions" onclick="changeView('live-auctions')"
-                class="nav-button hover:underline decoration-2 underline-offset-4 opacity-50 ">Live Auctions</button>
-            <button data-view="private-lots" onclick="changeView('private-lots')"
-                class="nav-button hover:underline decoration-2 underline-offset-4 opacity-50">Private Lots</button>
-            <button data-view="sell-artifact" onclick="changeView('sell-artifact')"
-                class="nav-button hover:underline decoration-2 underline-offset-4 opacity-50">Sell Artifact</button>
-            <button data-view="my-bids" onclick="changeView('my-bids')"
-                class="nav-button hover:underline underline-offset-4 decoration-2 opacity-50">My Bids</button>
-            <button data-view="search" onclick="changeView('my-search')"
-                class="nav-button hover:underline decoration-2 underline-offset-4 opacity-50">Search</button>
+            <a href="/" data-view="live-auctions" onclick="changeView('live-auctions')"
+                class="nav-button hover:underline decoration-2 underline-offset-4 opacity-50 ">Live Auctions</a>
+            <a href="private-lots.php" data-view="private-lots" onclick="changeView('private-lots')"
+                class="nav-button hover:underline decoration-2 underline-offset-4 opacity-50">Private Lots</a>
+            <a href="sell-artifact.php" data-view="sell-artifact" onclick="changeView('sell-artifact')"
+                class="nav-button hover:underline decoration-2 underline-offset-4 opacity-50">Sell Artifact</a>
+            <a href="bids.php" data-view="my-bids" onclick="changeView('my-bids')"
+                class="nav-button hover:underline underline-offset-4 decoration-2 opacity-50">My Portfolio</a>
+            <!-- <a href="my-search.php" data-view="search" onclick="changeView('my-search')"
+                class="nav-button hover:underline decoration-2 underline-offset-4 opacity-50">Search</a> -->
         </nav>
 
         <div class="flex items-center gap-3 relative">
 
-            <div id="profile-modal"
+            <!-- <div id="profile-modal"
                 class="absolute top-full right-0 mt-2 brutalist-border brutalist-shadow bg-white z-50 w-72 hidden">
                 <div class="flex items-center p-4 border-b-2 border-black">
                     <div
@@ -53,12 +53,12 @@
                         class="w-full mt-4 bg-black text-white py-2 text-xs font-bold uppercase hover:bg-gray-800 brutalist-shadow-sm brutalist-active cursor-pointer brutalist-border">
                         View Full History
                     </button>
-            <button onclick="window.location.href='/authenticate?action=register'"
-        class="w-full mt-4 hover:bg-red-600 text-black py-2 text-xs font-bold uppercase cursor-pointer border-red-300 brutalist-shadow-sm brutalist-active brutalist-border">
-    Log OUT
-</button>
+                    <button onclick="window.location.href='/authenticate?action=register'"
+                        class="w-full mt-4 hover:bg-red-600 text-black py-2 text-xs font-bold uppercase cursor-pointer border-red-300 brutalist-shadow-sm brutalist-active brutalist-border">
+                        Log OUT
+                    </button>
                 </div>
-            </div>
+            </div> -->
 
             <div id="funds-display" onclick="toggleProfileModal()" title="View Profile & Transactions"
                 class="text-right cursor-pointer p-2 rounded hover:bg-gray-100 transition-colors sm:block sm:w-36">
@@ -71,15 +71,15 @@
 
     <nav id="mobile-nav"
         class=" md:hidden w-full bg-white flex justify-center text-sm uppercase tracking-wide font-medium">
-        <button data-view="live-auctions" onclick="changeView('live-auctions'); "
-            class="nav-button p-3 border-b border-gray-100 hover:bg-gray-50 text-left ">Live Auctions</button>
-        <button data-view="private-lots" onclick="changeView('private-lots');"
+        <a href="/" data-view="live-auctions" onclick="changeView('live-auctions'); "
+            class="nav-button p-3 border-b border-gray-100 hover:bg-gray-50 text-left ">Live Auctions</a>
+        <a href="private-lots.php" data-view="private-lots" onclick="changeView('private-lots');"
             class="nav-button p-3 border-b border-gray-100 hover:bg-gray-50 text-left opacity-50">Private
-            Lots</button>
-        <button data-view="sell-artifact" onclick="changeView('sell-artifact');"
+            Lots</a>
+        <a href="sell-artifact.php" data-view="sell-artifact" onclick="changeView('sell-artifact');"
             class="nav-button p-3 border-b border-gray-100 hover:bg-gray-50 text-left opacity-50">Sell
-            Artifact</button>
-        <button data-view="my-bids" onclick="changeView('my-bids'); "
-            class="nav-button p-3 border-b border-gray-100 hover:bg-gray-50 text-left opacity-50">My Bids</button>
+            Artifact</a>
+        <a href="bids.php" data-view="my-bids" onclick="changeView('my-bids'); "
+            class="nav-button p-3 border-b border-gray-100 hover:bg-gray-50 text-left opacity-50">My Portfolio</a>
     </nav>
 </header>
