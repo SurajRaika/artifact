@@ -22,9 +22,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $password = trim($_POST["password"]); // Set the correct variable name
   }
 
-  // 3. Validate credentials 
+ // 3. Validate credentials 
   if (empty($user_email_err) && empty($password_err)) {
     // Assuming a User class exists with a login method
+    // NOTE: This file should probably start a session, but User.php now handles starting it on success.
+    // For robust design, session_start() should be in a global config or index.php.
     $localUser = new User($link);
     
     // The login method should find the user, verify the hashed password, and start the session.
@@ -32,8 +34,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $login_err = $localUser->login($user_email, $password);
 
     if (empty($login_err)) {
-      // Login successful! Redirect to a protected page.
-      header("location: /dashboard/index.php"); // Example protected page
+      // Login successful! Redirect to a protected page using header().
+      header("location: /"); // Example protected page
       exit;
     }
   }

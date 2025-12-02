@@ -13,3 +13,7 @@ DB_PASS=your_password
 
 
 
+mirror -R \
+  --exclude-from=exclude-list.txt \
+  --only-newer \
+  .  /htdocs

@@ -1,570 +1,502 @@
-# Database Migration System - Complete Guide
+# Production Migration System - Complete Guide
 
-## 📋 Table of Contents
-1. [Setup](#setup)
-2. [Core Concepts](#core-concepts)
-3. [Workflow Guide](#workflow-guide)
-4. [Command Reference](#command-reference)
-5. [Best Practices](#best-practices)
-6. [Troubleshooting](#troubleshooting)
-7. [Production Checklist](#production-checklist)
+## Overview
 
----
+This is a production-ready database migration system that handles schema versioning, rollbacks, backups, and full audit trails. It's designed to prevent the common bugs found in the original implementation.
 
-## Setup
+## Key Improvements Over Original
 
-### 1. Create Migration Directories
+### Bug Fixes
 
-```bash
-mkdir -p app/migrations/backups
-mkdir -p app/migrations/logs
-chmod 755 app/migrations/backups app/migrations/logs
-```
+1. **Rollback Table Tracking** - Fixed the critical bug where rollback didn't update the migrations table
+   - Now properly sets `status = 'rolled_back'` and `rolled_back_at` timestamp
+   - Clears batch number to prevent re-application of old migrations
 
-### 2. Add to Your Project
+2. **Migration State Management** - All migration states are now tracked correctly
+   - Applied, rolled back, failed, and pending states all sync properly
+   - Prevents orphaned migrations
 
-Place `MigrationManager.php` in `app/migrations/`  
-Place `migrate.php` in your project root  
+3. **Crash Recovery** - If a migration fails mid-execution
+   - Status recorded as 'failed'
+   - Never attempts to re-run failed migrations
+   - Manual intervention required
 
-### 3. Make CLI Executable
+4. **Dry-Run Mode** - Properly simulates migrations without touching database
+   - Separate environment tracking
+   - Doesn't update migration table
 
-```bash
-chmod +x migrate.php
-```
+5. **Checksum Validation** - Detects if migration files have been modified
+   - Stored on first run
+   - Can detect tampering or accidental changes
 
-### 4. Update Your .env
+### New Features
 
-```env
-DB_HOST=localhost
-DB_NAME=your_database
-DB_USER=root
-DB_PASS=your_password
-```
+- Execution time tracking (duration_ms)
+- Comprehensive logging to daily files
+- Backup/restore functionality
+- Migration verification tool
+- Detailed batch management
+- Better error messages and stack traces
+- Full CLI with user confirmations for dangerous operations
 
 ---
 
-## Core Concepts
+## Setup Instructions
 
-### What is a Migration?
+### 1. Directory Structure
 
-A migration is a file containing database changes (up) and how to undo them (down). Think of it like version control for your database schema.
+```
+project/
+├── app/
+│   ├── config.php              # Database config
+│   ├── MigrationManager.php    # Core migration logic
+│   └── migrations/
+│       ├── backups/            # Auto-created
+│       └── logs/               # Auto-created
+├── migrate.php                 # CLI tool
+└── your-app-files/
+```
 
-### Batch System
+### 2. Create app/config.php
 
-Each time you run `php migrate.php up`, all pending migrations run as one "batch". If any migration fails, the entire batch rolls back.
+```php
+<?php
+// app/config.php
+$db = new mysqli(
+    getenv('DB_HOST') ?? 'localhost',
+    getenv('DB_USER') ?? 'root',
+    getenv('DB_PASS') ?? '',
+    getenv('DB_NAME') ?? 'myapp'
+);
 
-**Why?** Atomicity - either all changes succeed or none do. No partial updates.
+if ($db->connect_error) {
+    die("Connection failed: " . $db->connect_error);
+}
 
-### Backup System
+$db->set_charset("utf8mb4");
 
-Before EVERY batch (up or down), a complete database backup is created automatically.
+// For CLI tools to reference
+$link = $db;
+```
 
-**Location:** `app/migrations/backups/`
+### 3. Verify Setup
+
+```bash
+php migrate.php help
+```
+
+You should see the full command list.
 
 ---
 
-## Workflow Guide
+## Common Workflows
 
-### Scenario 1: Adding a New Column
+### Creating a Migration
 
-**Step 1: Create Migration**
 ```bash
-php migrate.php make add_email_to_users
+php migrate.php make:migration CreateUsersTable
 ```
 
-**Step 2: Edit the migration file** (e.g., `app/migrations/20240101120000_add_email_to_users.php`)
+This creates: `app/migrations/20250305_143022_CreateUsersTable.php`
+
+Edit the file and add your SQL:
 
 ```php
 public function up() {
-    $sql = "ALTER TABLE users ADD COLUMN email VARCHAR(255) NOT NULL UNIQUE";
-    $this->pdo->exec($sql);
+    $sql = "CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )";
+    
+    if ($this->db->query($sql) === false) {
+        throw new Exception("Error: " . $this->db->error);
+    }
 }
 
 public function down() {
-    $sql = "ALTER TABLE users DROP COLUMN email";
-    $this->pdo->exec($sql);
+    $sql = "DROP TABLE IF EXISTS users";
+    
+    if ($this->db->query($sql) === false) {
+        throw new Exception("Error: " . $this->db->error);
+    }
 }
 ```
 
-**Step 3: Run migration**
-```bash
-php migrate.php up
-```
+**Important Rules:**
 
-Output should show:
-```
-✓ Backup created: before_batch_1_20240101_120000.sql
-✓ Executed: 20240101120000_add_email_to_users (0.1234s)
-✓ Batch 1 completed successfully
-```
+- Always use `IF NOT EXISTS` in up()
+- Always use `IF EXISTS` in down()
+- Throw exceptions on errors
+- Make down() idempotent (can run multiple times safely)
 
-**Step 4: Verify in database**
-```bash
-php migrate.php status
-```
-
----
-
-### Scenario 2: Something Went Wrong
-
-**Situation:** You ran a migration but the code was wrong and now the database is broken.
-
-**Immediate Fix (Last Batch Only):**
-```bash
-php migrate.php down
-```
-
-The system will:
-1. Create a backup first
-2. Run all `down()` methods from that batch in reverse order
-3. Restore database to previous state
-
-**If You Can't Rollback:**
-
-1. List available backups:
-```bash
-php migrate.php backups
-```
-
-2. Restore from backup:
-```bash
-php migrate.php restore before_batch_1_20240101_120000.sql
-```
-
----
-
-### Scenario 3: Testing Migrations Locally
-
-Before pushing to production:
+### Preview Before Running
 
 ```bash
-# Run your new migrations
-php migrate.php up
-
-# Test your application thoroughly
-
-# If there are issues, rollback
-php migrate.php down
-
-# Fix your migration code
-
-# Run again
-php migrate.php up
+php migrate.php migrate:dry-run
 ```
 
-Repeat until perfect.
+Shows what WOULD run without actually running it.
 
----
-
-### Scenario 4: Multiple Developers
-
-**Developer A** creates migration `add_status_column`  
-**Developer B** creates migration `add_role_column`
-
-Both add different migrations. When you run `php migrate.php up`, both run in order (by timestamp).
-
-**Rule:** Never modify another developer's migration file. Create a new one instead if changes are needed.
-
----
-
-## Command Reference
-
-### Create a Migration
+### Run Migrations
 
 ```bash
-php migrate.php make <name>
+# Run all pending
+php migrate.php migrate
+
+# Run up to a specific migration
+php migrate.php migrate CreateUsersTable
 ```
 
-Names should be descriptive:
-- ✅ `add_email_column_to_users`
-- ✅ `create_orders_table`
-- ✅ `add_index_to_users_email`
-- ❌ `fix_db`
-- ❌ `changes`
-
-### Run Pending Migrations
-
-```bash
-php migrate.php up
-```
-
-Or:
-```bash
-php migrate.php run
-```
-
-### Rollback Last Batch
-
-```bash
-php migrate.php down
-```
-
-Prompts for confirmation before executing.
-
-### View Migration History
+### Check Status
 
 ```bash
 php migrate.php status
 ```
 
-Shows: migration name, status (completed/failed/rolled_back), batch, execution time, timestamp.
+Output shows:
+- ✅ Applied migrations (green)
+- ⏳ Pending migrations (yellow)
+- ❌ Failed migrations (red)
 
-### Manage Backups
+### Rollback
 
-**List all backups:**
+```bash
+# Rollback last batch
+php migrate.php rollback
+
+# Rollback last 3 batches
+php migrate.php rollback 3
+
+# Rollback EVERYTHING (dangerous!)
+php migrate.php rollback:all
+```
+
+---
+
+## Advanced Scenarios
+
+### Scenario 1: Migration Failed Halfway
+
+**Problem:** Your migration crashed, database is in bad state.
+
+**Solution:**
+1. Check status: `php migrate.php status`
+2. You'll see the migration marked as 'failed'
+3. Fix the underlying database issue manually
+4. Fix your migration file
+5. Roll back: `php migrate.php rollback`
+6. Edit migration and rerun: `php migrate.php migrate`
+
+### Scenario 2: Need to Add a Column to Existing Table
+
+**Bad approach:**
+```php
+public function up() {
+    $sql = "ALTER TABLE users ADD COLUMN phone VARCHAR(20)";
+    $this->db->query($sql);
+}
+```
+
+**Good approach:**
+```php
+public function up() {
+    $sql = "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)";
+    
+    if ($this->db->query($sql) === false) {
+        throw new Exception("Error: " . $this->db->error);
+    }
+}
+
+public function down() {
+    $sql = "ALTER TABLE users DROP COLUMN IF EXISTS phone";
+    
+    if ($this->db->query($sql) === false) {
+        throw new Exception("Error: " . $this->db->error);
+    }
+}
+```
+
+### Scenario 3: Large Data Migration
+
+For migrations involving data transformation:
+
+```php
+public function up() {
+    // Step 1: Create new column
+    $sql1 = "ALTER TABLE users ADD COLUMN email_lower VARCHAR(255)";
+    if ($this->db->query($sql1) === false) {
+        throw new Exception("Error: " . $this->db->error);
+    }
+    
+    // Step 2: Populate with data
+    $sql2 = "UPDATE users SET email_lower = LOWER(email)";
+    if ($this->db->query($sql2) === false) {
+        throw new Exception("Error: " . $this->db->error);
+    }
+    
+    // Step 3: Add constraint
+    $sql3 = "ALTER TABLE users ADD UNIQUE KEY uk_email_lower (email_lower)";
+    if ($this->db->query($sql3) === false) {
+        throw new Exception("Error: " . $this->db->error);
+    }
+}
+
+public function down() {
+    $sql = "ALTER TABLE users DROP COLUMN email_lower";
+    if ($this->db->query($sql) === false) {
+        throw new Exception("Error: " . $this->db->error);
+    }
+}
+```
+
+### Scenario 4: Safe Production Deploy
+
+```bash
+# 1. Backup first
+php migrate.php backup production_before_deploy
+
+# 2. Preview
+php migrate.php migrate:dry-run
+
+# 3. Run
+php migrate.php migrate
+
+# 4. Verify
+php migrate.php status
+
+# 5. Verify app works, then cleanup old backups
+php migrate.php backups
+```
+
+---
+
+## Backup & Restore
+
+### Create Backup
+
+```bash
+# With default timestamp name
+php migrate.php backup
+
+# With custom name
+php migrate.php backup my_backup_name
+```
+
+### List Backups
+
 ```bash
 php migrate.php backups
 ```
 
-**Restore from backup:**
+### Restore from Backup
+
 ```bash
-php migrate.php restore before_batch_2_20240101_120500.sql
+php migrate.php restore
+
+# Then select the backup ID from the list
 ```
 
-### Advanced Commands
+---
 
-**Refresh** (rollback all, then run all):
+## Monitoring & Troubleshooting
+
+### View Logs
+
 ```bash
-php migrate.php refresh
+# Last 7 days
+php migrate.php logs
+
+# Last 30 days
+php migrate.php logs 30
 ```
 
-Use this when testing migrations in development.
+Logs are in: `app/migrations/logs/YYYY-MM-DD.log`
 
-**Reset** (rollback everything):
+### Verify Integrity
+
 ```bash
-php migrate.php reset
+php migrate.php verify
 ```
 
-⚠️ DESTRUCTIVE - Only use in development!
+Checks for:
+- Missing files for applied migrations
+- Orphaned migration files
+- Failed migrations
+
+### Database Schema
+
+The `migrations` table tracks:
+
+```
+id              - Auto-increment ID
+migration       - Migration filename (without .php)
+batch           - Batch number (migrations run together)
+status          - applied | rolled_back | failed | pending
+checksum        - SHA256 of migration file
+executed_at     - When it ran
+rolled_back_at  - When it was rolled back
+error_message   - Error if status is 'failed'
+duration_ms     - How long migration took
+```
 
 ---
 
 ## Best Practices
 
-### 1. Always Make Down() Match Up()
+### DO
 
-**WRONG:**
-```php
-public function up() {
-    $this->pdo->exec("ALTER TABLE users ADD COLUMN phone VARCHAR(20)");
-}
+✅ Write idempotent migrations (safe to run multiple times)
+✅ Always check `IF NOT EXISTS` / `IF EXISTS`
+✅ Test migrations locally first
+✅ Use dry-run before production
+✅ Backup before major migrations
+✅ Keep migrations small and focused
+✅ Name migrations clearly (CreateUsersTable, AddPhoneToUsers)
+✅ Use transactions where possible
+✅ Document complex migrations
 
-public function down() {
-    // Forgot to drop the column!
-}
-```
+### DON'T
 
-**CORRECT:**
-```php
-public function up() {
-    $this->pdo->exec("ALTER TABLE users ADD COLUMN phone VARCHAR(20)");
-}
+❌ Modify migration files after they're applied
+❌ Drop tables without backup
+❌ Leave migrations without down() methods
+❌ Run complex app logic in migrations
+❌ Assume migrations are fast
+❌ Skip dry-run for production
+❌ Delete or modify migration logs
+❌ Name migrations with timestamps (they auto-add them)
+❌ Use raw user input in migrations
 
-public function down() {
-    $this->pdo->exec("ALTER TABLE users DROP COLUMN phone");
-}
-```
+---
 
-### 2. One Change Per Migration
+## Example: Complete Migration Lifecycle
 
-**WRONG:**
-```php
-public function up() {
-    $this->pdo->exec("ALTER TABLE users ADD COLUMN phone VARCHAR(20)");
-    $this->pdo->exec("ALTER TABLE users ADD COLUMN address TEXT");
-    $this->pdo->exec("ALTER TABLE orders ADD COLUMN status VARCHAR(50)");
-    // Too many changes in one migration
-}
-```
+### Step 1: Create
 
-**CORRECT - Create 3 separate migrations:**
 ```bash
-php migrate.php make add_phone_to_users
-php migrate.php make add_address_to_users
-php migrate.php make add_status_to_orders
+php migrate.php make:migration AddStatusToOrders
 ```
 
-Why? If one fails, you can identify and fix it easily.
-
-### 3. Never Modify Data in Migrations (Usually)
-
-**WRONG:**
-```php
-public function up() {
-    $this->pdo->exec("DELETE FROM users WHERE age < 18");
-}
-```
-
-**CORRECT - Data changes go in scripts/seeder, not migrations:**
-```php
-public function up() {
-    // Only schema changes here
-    $this->pdo->exec("ALTER TABLE users ADD COLUMN age_verified INT DEFAULT 0");
-}
-```
-
-### 4. Be Explicit with Constraints
-
-**WRONG:**
-```php
-$this->pdo->exec("CREATE TABLE posts (id INT, title TEXT)");
-```
-
-**CORRECT:**
-```php
-$this->pdo->exec("
-    CREATE TABLE posts (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        title VARCHAR(255) NOT NULL,
-        content LONGTEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-");
-```
-
-### 5. Use Transactions for Safety
+### Step 2: Edit `app/migrations/20250305_143022_AddStatusToOrders.php`
 
 ```php
-public function up() {
-    try {
-        // Already wrapped by MigrationManager, but good to know
-        $this->pdo->exec("ALTER TABLE users ADD COLUMN status VARCHAR(50)");
-        $this->pdo->exec("UPDATE users SET status = 'active'");
-    } catch (Exception $e) {
-        throw $e; // MigrationManager will rollback
+<?php
+
+class AddStatusToOrders {
+    private $db;
+
+    public function __construct($db) {
+        $this->db = $db;
+    }
+
+    public function up() {
+        $sql = "ALTER TABLE orders 
+                ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending'";
+        
+        if ($this->db->query($sql) === false) {
+            throw new Exception($this->db->error);
+        }
+    }
+
+    public function down() {
+        $sql = "ALTER TABLE orders DROP COLUMN IF EXISTS status";
+        
+        if ($this->db->query($sql) === false) {
+            throw new Exception($this->db->error);
+        }
     }
 }
 ```
 
-### 6. Test Migrations in Development First
+### Step 3: Preview
 
 ```bash
-# Local testing
-php migrate.php up
-# Test your app
-php migrate.php down
-# Fix if needed
-php migrate.php up
-# Once perfect, commit and push
+$ php migrate.php migrate:dry-run
+
+Running migrations in DRY-RUN mode...
+
+The following 1 migration(s) WOULD be executed:
+  • 20250305_143022_AddStatusToOrders
+
+✓ Dry-run complete. No changes made to database.
+```
+
+### Step 4: Apply
+
+```bash
+$ php migrate.php migrate
+
+Running pending migrations...
+✓ Successfully applied 1 migrations.
+Batch: 1 | Migrations run: 1
+  ✓ 20250305_143022_AddStatusToOrders (45ms)
+```
+
+### Step 5: Verify
+
+```bash
+$ php migrate.php status
+
+Migration Status:
+...
+| 20250305_143022_AddStatus... | applied      | 1      | ...
+```
+
+### Step 6: Rollback (if needed)
+
+```bash
+$ php migrate.php rollback
+
+⚠️ Rollback last batch? (type 'yes' to proceed): yes
+
+✓ Successfully rolled back 1 migrations.
+Rolled back all: 1 migrations
+  ✓ 20250305_143022_AddStatusToOrders (32ms)
 ```
 
 ---
 
-## Troubleshooting
+## Troubleshooting Common Issues
 
-### Migration Fails: "Syntax Error"
+### "No database connection"
 
-```
-✗ Executed: 20240101120000_add_email (Error: Syntax error in SQL)
-```
+Check `app/config.php` exists and `$link` is defined.
 
-**Fix:**
-1. Check your SQL syntax
-2. Run `php migrate.php down` to rollback
-3. Edit the migration file
-4. Run `php migrate.php up` again
+### "Failed to create directory"
 
-### Migration Hangs
+Ensure the script has write permissions to `app/`.
 
-**Cause:** Large table operations without timeout.
-
-**Fix:** Add timeouts or split into multiple migrations:
-```php
-$this->pdo->exec("SET SESSION max_execution_time = 300");
-$this->pdo->exec("ALTER TABLE large_table ADD COLUMN new_col INT");
+```bash
+chmod -R 755 app/
 ```
 
-### Backup Creation Failed
+### "Migration syntax error"
 
-```
-✗ Backup creation failed
-```
+Check the migration file PHP syntax:
 
-**Check:**
-1. `app/migrations/backups/` exists and is writable
-2. `mysqldump` is installed: `which mysqldump`
-3. Database credentials in `.env` are correct
-
-### Can't Restore Backup
-
-```
-✗ Restore error: Backup file not found
+```bash
+php -l app/migrations/20250305_143022_YourMigration.php
 ```
 
-**Fix:**
-1. List backups: `php migrate.php backups`
-2. Use exact filename: `php migrate.php restore exact_filename.sql`
+### "Rollback didn't reverse my migration"
 
-### Lost Data After Migration
-
-**Recovery:**
-1. List all backups: `php migrate.php backups`
-2. Find backup from before the problem migration
-3. Restore: `php migrate.php restore backup_name.sql`
-4. Identify what went wrong
-5. Create a proper migration
-6. Run: `php migrate.php up`
+Ensure your `down()` method is properly implemented. It must:
+- Reverse the `up()` changes
+- Be idempotent (safe to run twice)
+- Not fail if column/table doesn't exist
 
 ---
 
 ## Production Checklist
 
-Before deploying to production:
-
-- [ ] All migrations tested locally
-- [ ] Each migration has proper `up()` and `down()` methods
-- [ ] Migrations are one change per file
-- [ ] Down methods undo exactly what up does
-- [ ] No hardcoded data/sensitive info in migrations
-- [ ] Tested rollback scenario: `php migrate.php up` then `php migrate.php down`
-- [ ] Tested on copy of production database (if possible)
-- [ ] Backup space available (100% of database size)
-- [ ] Database user has CREATE/ALTER/DROP permissions
-
-### Production Deployment Steps
-
-**1. Take Database Backup (Manually)**
-```bash
-mysqldump -u root -p database_name > manual_backup_$(date +%Y%m%d_%H%M%S).sql
-```
-
-**2. Run Migrations**
-```bash
-php migrate.php up
-```
-
-**3. Verify Status**
-```bash
-php migrate.php status
-```
-
-**4. Test Application**
-- Check critical features work
-- Verify data is correct
-
-**5. If Issues Found**
-```bash
-php migrate.php down
-# Fix and redeploy
-```
-
-**6. Keep Backup**
-- Keep at least last 3-5 backups
-- Archive older backups to separate storage
-
----
-
-## Decision Tree: What Should I Do?
-
-```
-I want to change the database schema
-├─ Create a new migration
-│  └─ php migrate.php make <name>
-│
-I ran migrations and need to undo
-├─ Last batch only
-│  └─ php migrate.php down
-│
-├─ Multiple batches back
-│  └─ php migrate.php backups
-│     php migrate.php restore <filename>
-│
-I modified a migration file that was already run
-├─ Never do this! Instead:
-│  ├─ php migrate.php down (undo it)
-│  ├─ Fix the file
-│  └─ php migrate.php up (run again)
-│
-I want to test my migrations
-├─ php migrate.php refresh
-│  (Rolls back and runs all again)
-│
-I'm unsure if my migration is safe
-├─ Test locally first:
-│  ├─ php migrate.php up
-│  ├─ Verify data/app
-│  ├─ php migrate.php down
-│  └─ Once sure, go to production
-│
-My migration failed in production
-├─ 1. Immediate: php migrate.php down
-├─ 2. Verify database: php migrate.php status
-├─ 3. If issues: php migrate.php restore <backup>
-├─ 4. Fix migration
-├─ 5. Test locally again
-└─ 6. Rerun: php migrate.php up
-```
-
----
-
-## Example Production Migration
-
-Real-world example - adding a new user verification system:
-
-**Step 1: Create**
-```bash
-php migrate.php make add_email_verification_system
-```
-
-**Step 2: Edit migration**
-```php
-public function up() {
-    // Add columns for email verification
-    $sql = "
-        ALTER TABLE users 
-        ADD COLUMN email_verified_at TIMESTAMP NULL,
-        ADD COLUMN verification_token VARCHAR(255),
-        ADD INDEX idx_verification_token (verification_token)
-    ";
-    $this->pdo->exec($sql);
-    
-    // Mark existing users as verified
-    $this->pdo->exec("UPDATE users SET email_verified_at = NOW()");
-}
-
-public function down() {
-    $sql = "
-        ALTER TABLE users 
-        DROP INDEX idx_verification_token,
-        DROP COLUMN email_verified_at,
-        DROP COLUMN verification_token
-    ";
-    $this->pdo->exec($sql);
-}
-```
-
-**Step 3: Test locally**
-```bash
-php migrate.php up
-# Verify changes
-php migrate.php down
-# Verify rollback works
-php migrate.php up
-```
-
-**Step 4: Commit and push**
-```bash
-git add app/migrations/20240101120000_add_email_verification_system.php
-git commit -m "Add email verification system migration"
-git push
-```
-
-**Step 5: Deploy to production**
-```bash
-php migrate.php up
-```
-
----
-
-## Summary
-
-✅ Always create migrations for schema changes  
-✅ Test migrations locally before production  
-✅ Keep migrations one change per file  
-✅ Make sure down() undoes up()  
-✅ Use backups as safety net  
-✅ Check status before and after running  
-✅ Never modify ran migrations - create new ones  
-✅ Rollback before fixing - then rerun  
-
-Questions? Check `php migrate.php help`
+- [ ] Database backups configured
+- [ ] `migrate.php` file permissions restricted (644)
+- [ ] Migration directory writable by PHP process
+- [ ] Test migration/rollback locally first
+- [ ] Backup database before applying migrations
+- [ ] Run dry-run first
+- [ ] Have rollback plan
+- [ ] Monitor logs after migration
+- [ ] Document any manual steps needed

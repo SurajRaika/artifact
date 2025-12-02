@@ -1,2 +1,43 @@
-node_modules
-vendor
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+bun.lock
+
+# Composer vendor
+vendor/
+app/env.php
+app/migrations/
+app/migrations/*
+# Environment / credentials (if any)
+.env
+.env.*
+
+# IDE and system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# PHP specific cache / session
+*.cache
+*.log
+*.tmp
+
+# Migrations backups & logs
+app/migrations/backups/
+app/migrations/logs/
+
+# Temporary output files
+*.sql
+
+# Markdown guides (optional)
+Database Migration System - Complete Guide.md
+
+# Exclude local-only test or private files
+test.html
+redme.md
+
+# Exclude your lftp list itself
+exclude-list.txt

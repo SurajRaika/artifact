@@ -1,51 +1,64 @@
 <?php
+$db_env = require 'env.php';
 
-class MigrationManager {
+class MigrationManager
+{
     private $db;
     private $migrationsDir;
     private $backupsDir;
     private $logsDir;
     private $isDryRun = false;
-    // Set a default environment to distinguish dry-run logs/status
-    private $environment = 'default'; 
+    private $environment = 'production';
+    private $appliedMigrationCache = [];
+    const MIGRATION_TABLE = 'migrations';
+    const MIGRATION_PATTERN = '/^(\d{8})_(\d{6})_(.+)\.php$/';
 
-    // --- Core Setup ---
-
-    public function __construct($db, $migrationsDir = __DIR__ . "/migrations") {
-        $this->db = $db;
+    public function __construct($db, $migrationsDir = null)
+    {
         
-        // Assume 'app' is the root of the project structure where config and manager live
-        // Migrations will be placed in /migrations relative to this file's location
-        $this->migrationsDir = str_replace(['/app', '\\app'], '', $migrationsDir);
+        if (!$db) {
+            throw new Exception("Database connection is required");
+        }
+
+        $this->db = $db;
+        $this->migrationsDir = $migrationsDir ?? __DIR__ . "/migrations";
         $this->backupsDir = $this->migrationsDir . "/backups";
         $this->logsDir = $this->migrationsDir . "/logs";
 
         $this->ensureDirectories();
         $this->createMigrationsTable();
+        $this->setEnvironment();
     }
 
-    private function ensureDirectories() {
+    private function ensureDirectories()
+    {
         foreach ([$this->migrationsDir, $this->backupsDir, $this->logsDir] as $dir) {
             if (!is_dir($dir)) {
-                // Suppress errors for mkdir and log the issue if it fails
                 if (!@mkdir($dir, 0755, true)) {
-                    throw new Exception("Failed to create directory: " . $dir);
+                    throw new Exception("Failed to create directory: {$dir}. Check permissions.");
                 }
+            }
+            if (!is_writable($dir)) {
+                throw new Exception("Directory not writable: {$dir}. Check permissions.");
             }
         }
     }
 
-    private function createMigrationsTable() {
-        // Ensure the table for tracking migrations exists
-        $query = "CREATE TABLE IF NOT EXISTS migrations (
+    private function createMigrationsTable()
+    {
+        $query = "CREATE TABLE IF NOT EXISTS " . self::MIGRATION_TABLE . " (
             id INT AUTO_INCREMENT PRIMARY KEY,
             migration VARCHAR(255) NOT NULL UNIQUE,
             batch INT NOT NULL,
-            status ENUM('applied', 'rolled_back', 'failed') DEFAULT 'applied',
-            executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            rolled_back_at TIMESTAMP NULL,
+            status ENUM('applied', 'rolled_back', 'failed', 'pending') DEFAULT 'pending',
             checksum VARCHAR(64),
-            error_message TEXT
+            executed_at TIMESTAMP NULL,
+            rolled_back_at TIMESTAMP NULL,
+            error_message LONGTEXT,
+            duration_ms INT DEFAULT 0,
+            INDEX idx_batch (batch),
+            INDEX idx_status (status),
+            INDEX idx_executed_at (executed_at)
         )";
 
         if ($this->db->query($query) === false) {
@@ -53,45 +66,80 @@ class MigrationManager {
         }
     }
 
-    // --- Utility Functions ---
-
-    public function setDryRun($isDryRun) {
-        $this->isDryRun = $isDryRun;
-        $this->environment = $isDryRun ? 'dry-run' : 'default';
+    private function setEnvironment()
+    {
+        $this->environment = getenv('MIGRATION_ENV') ?: 'production';
     }
 
-    private function getNextBatch() {
-        $result = $this->db->query("SELECT MAX(batch) as max_batch FROM migrations WHERE status = 'applied'");
+    public function setDryRun($isDryRun)
+    {
+        $this->isDryRun = (bool)$isDryRun;
+    }
+
+    private function getNextBatch()
+    {
+        $result = $this->db->query("SELECT MAX(batch) as max_batch FROM " . self::MIGRATION_TABLE . " WHERE status = 'applied'");
+
+        if (!$result) {
+            throw new Exception("Database query failed: " . $this->db->error);
+        }
+
         $row = $result->fetch_assoc();
-        return ($row['max_batch'] ?? 0) + 1;
+        return (int)($row['max_batch'] ?? 0) + 1;
     }
 
-    private function checkPhpSyntax($file) {
+    private function getAppliedMigrations()
+    {
+        if (!empty($this->appliedMigrationCache)) {
+            return $this->appliedMigrationCache;
+        }
+
+        $result = $this->db->query("SELECT migration, batch, status FROM " . self::MIGRATION_TABLE);
+
+        if (!$result) {
+            throw new Exception("Failed to fetch applied migrations: " . $this->db->error);
+        }
+
+        $applied = [];
+        while ($row = $result->fetch_assoc()) {
+            $applied[$row['migration']] = $row;
+        }
+
+        $this->appliedMigrationCache = $applied;
+        return $applied;
+    }
+
+    private function checkPhpSyntax($file)
+    {
         $output = [];
         $return = 0;
-        // Check syntax using the PHP interpreter
-        exec("php -l " . escapeshellarg($file), $output, $return);
+        exec("php -l " . escapeshellarg($file) . " 2>&1", $output, $return);
         return $return === 0;
     }
 
-    private function log($message, $type = 'info') {
+    private function log($message, $type = 'info', $exception = null)
+    {
         $timestamp = date('Y-m-d H:i:s');
-        $logEntry = "[{$timestamp}][{$this->environment}][{$type}] {$message}\n";
-        
-        // Log to a daily log file
-        $logFile = $this->logsDir . '/' . date('Y-m-d') . '.log';
-        file_put_contents($logFile, $logEntry, FILE_APPEND);
-    }
-    
-    // --- CLI Command Implementations (Used by migrate.php) ---
+        $logEntry = "[{$timestamp}] [{$type}] {$message}";
 
-    /**
-     * Creates a new migration file with a timestamp prefix and template content.
-     * @param string $className The desired class name (e.g., CreateUsersTable).
-     * @return string The filename of the created file.
-     * @throws Exception if the file creation fails.
-     */
-    public function createMigrationFile($className) {
+        if ($exception) {
+            $logEntry .= " | Exception: " . $exception->getMessage();
+        }
+
+        $logEntry .= "\n";
+        $logFile = $this->logsDir . '/' . date('Y-m-d') . '.log';
+
+        if (!@file_put_contents($logFile, $logEntry, FILE_APPEND)) {
+            error_log("Failed to write migration log: {$logFile}");
+        }
+    }
+
+    public function createMigrationFile($className)
+    {
+        if (!preg_match('/^[A-Z][a-zA-Z0-9]*$/', $className)) {
+            throw new Exception("Invalid class name. Must start with uppercase letter and contain only alphanumeric characters.");
+        }
+
         $timestamp = date('Ymd_His');
         $fileName = $timestamp . '_' . $className . '.php';
         $filePath = $this->migrationsDir . '/' . $fileName;
@@ -100,374 +148,681 @@ class MigrationManager {
             throw new Exception("Migration file '$fileName' already exists.");
         }
 
-        // The template for the new migration file
-        $template = <<<EOT
-<?php
+        $template = "<?php
 
-class $className {
-    private \$db;
+            class {$className} {
+            private \$db;
+            private \$table = ''; // Set your table name here
 
-    public function __construct(\$db) {
-        \$this->db = \$db;
-    }
+            public function __construct(\$db) {
+                \$this->db = \$db;
+            }
 
-    /**
-     * Run the migrations.
-     * This method applies the schema change.
-     */
-    public function up() {
-        // SQL Example:
-        // \$sql = "
-        //     CREATE TABLE users (
-        //         id INT AUTO_INCREMENT PRIMARY KEY,
-        //         username VARCHAR(50) NOT NULL UNIQUE,
-        //         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        //     )
-        // ";
-        // if (\$this->db->query(\$sql) === false) {
-        //     throw new Exception(\$this->db->error);
-        // }
-    }
+            /**
+             * Run the migration - apply schema changes.
+             * Always check if table/column exists before creating.
+             */
+            public function up() {
+                // Example:
+                // \$sql = \"CREATE TABLE IF NOT EXISTS users (
+                //     id INT AUTO_INCREMENT PRIMARY KEY,
+                //     name VARCHAR(255) NOT NULL,
+                //     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                // )\";
+                // 
+                // if (\$this->db->query(\$sql) === false) {
+                //     throw new Exception(\"Error: \" . \$this->db->error);
+                // }
+            }
 
-    /**
-     * Reverse the migrations.
-     * This method reverses the schema change made in up().
-     */
-    public function down() {
-        // SQL Example:
-        // \$sql = "DROP TABLE users";
-        // if (\$this->db->query(\$sql) === false) {
-        //     throw new Exception(\$this->db->error);
-        // }
-    }
-}
-EOT;
+            /**
+             * Reverse the migration - undo schema changes.
+             * Must be able to run safely even if up() partially failed.
+             * Don't drop tables - use ALTER or DROP COLUMN instead for safety.
+             */
+            public function down() {
+                // Example:
+                // \$sql = \"DROP TABLE IF EXISTS users\";
+                // 
+                // if (\$this->db->query(\$sql) === false) {
+                //     throw new Exception(\"Error: \" . \$this->db->error);
+                // }
+            }
+        }
+        ";
 
-        if (file_put_contents($filePath, $template) === false) {
-            throw new Exception("Could not write to file: $filePath");
+        if (@file_put_contents($filePath, $template) === false) {
+            throw new Exception("Could not write migration file: {$filePath}. Check directory permissions.");
         }
 
-        $this->log("New migration file created: $fileName");
+        $this->log("Migration created: {$fileName}");
         return $fileName;
     }
 
-    /**
-     * Retrieves all migration files from the directory and compares them to the database record.
-     * @return array
-     */
-    public function getStatus() {
+    public function getStatus()
+    {
+        // Always refresh cache to get latest state
+        $this->appliedMigrationCache = [];
+
         $fileMigrations = $this->getMigrationFiles();
-        
-        // Get applied migrations from DB
-        $appliedMigrations = [];
-        $result = $this->db->query("SELECT migration, batch, executed_at, status FROM migrations ORDER BY executed_at ASC");
-        while ($row = $result->fetch_assoc()) {
-            $appliedMigrations[$row['migration']] = $row;
-        }
+        $appliedMigrations = $this->getAppliedMigrations();
 
         $status = [];
+
         foreach ($fileMigrations as $file) {
             $migrationName = pathinfo($file, PATHINFO_FILENAME);
-            $isApplied = isset($appliedMigrations[$migrationName]) && $appliedMigrations[$migrationName]['status'] == 'applied';
-            
+            $applied = $appliedMigrations[$migrationName] ?? null;
+
+            // Only show as applied if status is actually 'applied'
+            $displayStatus = 'pending';
+            $batch = null;
+
+            if ($applied) {
+                $displayStatus = $applied['status'];
+                $batch = $applied['batch'] ?? null;
+            }
+
             $status[] = [
                 'name' => $migrationName,
                 'file' => $file,
-                'status' => $isApplied ? 'applied' : 'pending',
-                'batch' => $isApplied ? $appliedMigrations[$migrationName]['batch'] : null,
-                'executed_at' => $isApplied ? $appliedMigrations[$migrationName]['executed_at'] : null,
+                'status' => $displayStatus,
+                'batch' => $batch,
+                'file_exists' => true,
             ];
         }
-        
-        // Add any DB records that no longer have a file (for cleanup/tracking)
+
+        // Show missing files (in DB but not on disk)
         foreach ($appliedMigrations as $name => $data) {
-            if (!in_array($name . '.php', $fileMigrations) && $data['status'] == 'applied') {
-                 $status[] = [
-                    'name' => $name . " (MISSING FILE)",
+            if (!in_array($name . '.php', $fileMigrations)) {
+                $status[] = [
+                    'name' => $name,
                     'file' => 'N/A',
-                    'status' => 'applied (MISSING)',
+                    'status' => $data['status'] . ' (MISSING FILE)',
                     'batch' => $data['batch'],
-                    'executed_at' => $data['executed_at'],
+                    'file_exists' => false,
                 ];
             }
         }
 
+        usort($status, function ($a, $b) {
+            return strcmp($a['name'], $b['name']);
+        });
+
         return $status;
     }
 
-    /**
-     * Gets only the pending migration files.
-     * @return array List of migration filenames.
-     */
-    public function getPendingMigrations() {
+    public function getPendingMigrations()
+    {
         $fileMigrations = $this->getMigrationFiles();
-        
-        $appliedMigrations = [];
-        $result = $this->db->query("SELECT migration FROM migrations WHERE status = 'applied'");
-        while ($row = $result->fetch_assoc()) {
-            $appliedMigrations[$row['migration']] = true;
-        }
+        $applied = $this->getAppliedMigrations();
 
         $pending = [];
         foreach ($fileMigrations as $file) {
             $migrationName = pathinfo($file, PATHINFO_FILENAME);
-            if (!isset($appliedMigrations[$migrationName])) {
+            $isApplied = isset($applied[$migrationName]) && $applied[$migrationName]['status'] === 'applied';
+
+            if (!$isApplied) {
                 $pending[] = $file;
             }
         }
+
         return $pending;
     }
 
-    /**
-     * Executes all pending migrations.
-     * @param string|null $target If set, migrates only up to this file/class name.
-     * @return array Results
-     */
-    public function migrate($target = null) {
-        $pendingMigrations = $this->getPendingMigrations();
+    public function migrate($target = null)
+    {
+        $pending = $this->getPendingMigrations();
+
+        if (empty($pending)) {
+            $this->log("No pending migrations");
+            return ['success' => true, 'message' => 'No pending migrations.', 'ran' => 0, 'results' => []];
+        }
+
         $batch = $this->getNextBatch();
         $results = [];
 
-        if (empty($pendingMigrations)) {
-            $this->log("No pending migrations to run.");
-            return ['success' => true, 'message' => 'No pending migrations.', 'ran' => 0];
-        }
-
-        foreach ($pendingMigrations as $file) {
+        foreach ($pending as $file) {
             $result = $this->applyMigration($file, $batch, 'up');
             $results[] = $result;
 
-            if (!$result['success'] || (isset($target) && pathinfo($file, PATHINFO_FILENAME) === $target)) {
-                break; // Stop on failure or if target is reached
+            if (!$result['success']) {
+                $this->log("Migration halted due to failure in {$file}", 'warn');
+                break;
+            }
+
+            if ($target && pathinfo($file, PATHINFO_FILENAME) === $target) {
+                break;
             }
         }
-        
-        $ran = count(array_filter($results, fn($r) => $r['success']));
-        $this->log("Migration run completed. Ran {$ran} migrations in batch {$batch}.");
 
-        return ['success' => true, 'message' => "Successfully applied {$ran} migrations.", 'ran' => $ran, 'results' => $results];
+        $ran = count(array_filter($results, fn($r) => $r['success']));
+        $this->log("Migration batch {$batch} completed: {$ran} migrations applied");
+
+        return [
+            'success' => true,
+            'message' => "Successfully applied {$ran} migrations.",
+            'ran' => $ran,
+            'batch' => $batch,
+            'results' => $results
+        ];
     }
-    
-    /**
-     * Executes a migration's 'up' or 'down' method.
-     * @param string $file The migration filename.
-     * @param int $batch The batch number.
-     * @param string $direction 'up' or 'down'.
-     * @return array Result of the operation.
-     */
-    private function applyMigration($file, $batch, $direction) {
+
+    private function applyMigration($file, $batch, $direction)
+    {
         $filePath = $this->migrationsDir . '/' . $file;
         $migrationName = pathinfo($file, PATHINFO_FILENAME);
-        $className = substr($migrationName, 15);
-        $checksum = hash_file('sha256', $filePath);
+        $startTime = microtime(true);
+
+        if (!file_exists($filePath)) {
+            $errorMsg = "Migration file not found: {$file}";
+            $this->log($errorMsg, 'error');
+            return ['success' => false, 'migration' => $migrationName, 'error' => $errorMsg, 'direction' => $direction];
+        }
 
         if (!$this->checkPhpSyntax($filePath)) {
-            $errorMsg = "Syntax error in {$file}. Aborting.";
+            $errorMsg = "PHP syntax error in {$file}";
             $this->log($errorMsg, 'error');
-            return ['success' => false, 'migration' => $migrationName, 'error' => $errorMsg];
+            return ['success' => false, 'migration' => $migrationName, 'error' => $errorMsg, 'direction' => $direction];
         }
 
-        // --- Dry Run Handling ---
-        if ($this->isDryRun) {
-             $this->log("Dry run: Would execute {$migrationName}->{$direction}() in batch {$batch}.");
-             return ['success' => true, 'migration' => $migrationName, 'dry_run' => true];
+        $className = $this->extractClassName($filePath);
+        if (!$className) {
+            $errorMsg = "Could not find class definition in {$file}";
+            $this->log($errorMsg, 'error');
+            return ['success' => false, 'migration' => $migrationName, 'error' => $errorMsg, 'direction' => $direction];
         }
-        // --- End Dry Run Handling ---
+
+        $checksum = hash_file('sha256', $filePath);
+
+        if ($this->isDryRun) {
+            $this->log("DRY RUN: Would execute {$migrationName}->{$direction}() in batch {$batch}", 'info');
+            return [
+                'success' => true,
+                'migration' => $migrationName,
+                'direction' => $direction,
+                'dry_run' => true
+            ];
+        }
 
         try {
             require_once $filePath;
+
+            if (!class_exists($className)) {
+                throw new Exception("Class {$className} not found in {$file}");
+            }
+
             $migration = new $className($this->db);
-            
-            // Execute the migration logic (up/down)
+
+            if (!method_exists($migration, $direction)) {
+                throw new Exception("Method {$direction}() not found in {$className}");
+            }
+
             $migration->$direction();
-            
-            // Update the migrations table
-            if ($direction === 'up') {
-                $stmt = $this->db->prepare("INSERT INTO migrations (migration, batch, status, checksum) VALUES (?, ?, 'applied', ?) 
-                                            ON DUPLICATE KEY UPDATE batch=?, status='applied', executed_at=CURRENT_TIMESTAMP, rolled_back_at=NULL, checksum=?");
-                $stmt->bind_param("sisis", $migrationName, $batch, $checksum, $batch, $checksum);
-            } else { // 'down'
-                 $stmt = $this->db->prepare("UPDATE migrations SET status='rolled_back', rolled_back_at=CURRENT_TIMESTAMP, batch=NULL WHERE migration=?");
-                $stmt->bind_param("s", $migrationName);
-            }
-            
-            $stmt->execute();
-            $stmt->close();
+            $duration = round((microtime(true) - $startTime) * 1000);
 
-            $this->log("Successfully executed {$migrationName}->{$direction}() in batch {$batch}.");
-            return ['success' => true, 'migration' => $migrationName, 'direction' => $direction];
+            // Record in database
+            $this->recordMigration($migrationName, $batch, $direction, $checksum, $duration);
+
+            $this->log("Successfully executed {$migrationName}->{$direction}() in {$duration}ms", 'success');
+
+            return [
+                'success' => true,
+                'migration' => $migrationName,
+                'direction' => $direction,
+                'duration_ms' => $duration
+            ];
         } catch (Exception $e) {
-            $errorMsg = "Failed to execute {$migrationName}->{$direction}(): " . $e->getMessage();
-            $this->log($errorMsg, 'error');
-            
-            // Record failure in DB if migrating up
+            $duration = round((microtime(true) - $startTime) * 1000);
+            $errorMsg = $e->getMessage();
+            $this->log("Failed executing {$migrationName}->{$direction}(): {$errorMsg}", 'error', $e);
+
             if ($direction === 'up') {
-                 $stmt = $this->db->prepare("INSERT INTO migrations (migration, batch, status, checksum, error_message) VALUES (?, ?, 'failed', ?, ?) 
-                                            ON DUPLICATE KEY UPDATE batch=?, status='failed', executed_at=CURRENT_TIMESTAMP, rolled_back_at=NULL, checksum=?, error_message=?");
-                $stmt->bind_param("sississ", $migrationName, $batch, $checksum, $errorMsg, $batch, $checksum, $errorMsg);
-                $stmt->execute();
-                $stmt->close();
+                $this->recordMigrationFailure($migrationName, $batch, $checksum, $errorMsg, $duration);
             }
 
-            return ['success' => false, 'migration' => $migrationName, 'error' => $errorMsg, 'direction' => $direction];
+            return [
+                'success' => false,
+                'migration' => $migrationName,
+                'error' => $errorMsg,
+                'direction' => $direction,
+                'duration_ms' => $duration
+            ];
         }
     }
 
+    private function recordMigration($migrationName, $batch, $direction, $checksum, $duration)
+    {
+        if ($direction === 'up') {
+            $stmt = $this->db->prepare("
+                INSERT INTO " . self::MIGRATION_TABLE . " 
+                (migration, batch, status, checksum, executed_at, duration_ms) 
+                VALUES (?, ?, 'applied', ?, NOW(), ?)
+                ON DUPLICATE KEY UPDATE 
+                    batch = ?, 
+                    status = 'applied', 
+                    checksum = ?, 
+                    executed_at = NOW(), 
+                    rolled_back_at = NULL,
+                    error_message = NULL,
+                    duration_ms = ?
+            ");
 
-    /**
-     * Rolls back a number of batches.
-     * @param int $steps Number of batches to rollback.
-     * @return array Results
-     */
-    public function rollback($steps = 1) {
-        $sql = "SELECT DISTINCT batch FROM migrations WHERE status = 'applied' ORDER BY batch DESC LIMIT ?";
-        $stmt = $this->db->prepare($sql);
+            if (!$stmt) {
+                throw new Exception("Prepare failed: " . $this->db->error);
+            }
+
+            if (!$stmt->bind_param("sisisis", $migrationName, $batch, $checksum, $duration, $batch, $checksum, $duration)) {
+                throw new Exception("Bind failed: " . $stmt->error);
+            }
+
+            if (!$stmt->execute()) {
+                throw new Exception("Execute failed: " . $stmt->error);
+            }
+
+            $stmt->close();
+        } else { // down
+            $stmt = $this->db->prepare("
+                UPDATE " . self::MIGRATION_TABLE . " 
+                SET status = 'rolled_back', 
+                    rolled_back_at = NOW(),
+                    error_message = NULL
+                WHERE migration = ?
+            ");
+
+            if (!$stmt) {
+                throw new Exception("Prepare failed: " . $this->db->error);
+            }
+
+            if (!$stmt->bind_param("s", $migrationName)) {
+                throw new Exception("Bind failed: " . $stmt->error);
+            }
+
+            if (!$stmt->execute()) {
+                throw new Exception("Execute failed: " . $stmt->error);
+            }
+
+            $stmt->close();
+        }
+
+        // Clear cache
+        $this->appliedMigrationCache = [];
+    }
+
+    private function recordMigrationFailure($migrationName, $batch, $checksum, $error, $duration)
+    {
+        $stmt = $this->db->prepare("
+            INSERT INTO " . self::MIGRATION_TABLE . " 
+            (migration, batch, status, checksum, executed_at, error_message, duration_ms) 
+            VALUES (?, ?, 'failed', ?, NOW(), ?, ?)
+            ON DUPLICATE KEY UPDATE 
+                batch = ?, 
+                status = 'failed', 
+                checksum = ?, 
+                executed_at = NOW(), 
+                error_message = ?,
+                duration_ms = ?
+        ");
+
+        if (!$stmt) {
+            throw new Exception("Prepare failed: " . $this->db->error);
+        }
+
+        if (!$stmt->bind_param("sissis", $migrationName, $batch, $checksum, $error, $duration, $batch, $checksum, $error, $duration)) {
+            throw new Exception("Bind failed: " . $stmt->error);
+        }
+
+        if (!$stmt->execute()) {
+            throw new Exception("Execute failed: " . $stmt->error);
+        }
+
+        $stmt->close();
+        $this->appliedMigrationCache = [];
+    }
+
+    public function rollback($steps = 1)
+    {
+        if ($steps < 1) {
+            throw new Exception("Steps must be at least 1");
+        }
+
+        $stmt = $this->db->prepare("
+            SELECT DISTINCT batch FROM " . self::MIGRATION_TABLE . " 
+            WHERE status = 'applied' 
+            ORDER BY batch DESC 
+            LIMIT ?
+        ");
+
+        if (!$stmt) {
+            throw new Exception("Prepare failed: " . $this->db->error);
+        }
+
         $stmt->bind_param('i', $steps);
         $stmt->execute();
         $result = $stmt->get_result();
+
         $batches = [];
         while ($row = $result->fetch_assoc()) {
             $batches[] = $row['batch'];
         }
         $stmt->close();
-        
+
         if (empty($batches)) {
-            $this->log("No applied migrations to rollback.");
-            return ['success' => true, 'message' => 'No migrations to rollback.', 'rolled_back' => 0];
+            $this->log("No applied migrations to rollback");
+            return ['success' => true, 'message' => 'No migrations to rollback.', 'rolled_back' => 0, 'results' => []];
         }
 
-        $migrationsToRollback = [];
-        $batchesString = implode(', ', $batches);
-        
-        $sql = "SELECT migration FROM migrations WHERE status = 'applied' AND batch IN ({$batchesString}) ORDER BY executed_at DESC";
-        $result = $this->db->query($sql);
-        
-        while ($row = $result->fetch_assoc()) {
-            $migrationsToRollback[] = $row['migration'] . '.php';
-        }
-
-        $results = [];
-        foreach ($migrationsToRollback as $file) {
-            $result = $this->applyMigration($file, 0, 'down'); // Batch is irrelevant for rollback
-            $results[] = $result;
-            if (!$result['success']) {
-                $this->log("Rollback failed for {$file}. Aborting subsequent rollbacks.", 'error');
-                break;
-            }
-        }
-        
-        $rolledBack = count(array_filter($results, fn($r) => $r['success']));
-        $this->log("Rollback run completed. Rolled back {$rolledBack} migrations.");
-        
-        return ['success' => true, 'message' => "Successfully rolled back {$rolledBack} migrations.", 'rolled_back' => $rolledBack, 'results' => $results];
+        return $this->executRollback($batches, 'partial');
     }
-    
-    /**
-     * Rolls back all migrations by executing down() for all applied migrations.
-     * @return array Results
-     */
-    public function rollbackAll() {
-        // Get all applied migrations, ordered by execution time descending (reverse order)
-        $sql = "SELECT migration FROM migrations WHERE status = 'applied' ORDER BY executed_at DESC";
-        $result = $this->db->query($sql);
-        
-        $migrationsToRollback = [];
-        while ($row = $result->fetch_assoc()) {
-            $migrationsToRollback[] = $row['migration'] . '.php';
-        }
-        
-        if (empty($migrationsToRollback)) {
-            $this->log("No applied migrations to rollback.");
-            return ['success' => true, 'message' => 'No migrations to rollback.', 'rolled_back' => 0];
+
+    public function rollbackAll()
+    {
+        $result = $this->db->query("
+            SELECT DISTINCT batch FROM " . self::MIGRATION_TABLE . " 
+            WHERE status = 'applied' 
+            ORDER BY batch DESC
+        ");
+
+        if (!$result) {
+            throw new Exception("Query failed: " . $this->db->error);
         }
 
+        $batches = [];
+        while ($row = $result->fetch_assoc()) {
+            $batches[] = $row['batch'];
+        }
+
+        if (empty($batches)) {
+            $this->log("No migrations to rollback");
+            return ['success' => true, 'message' => 'No migrations to rollback.', 'rolled_back' => 0, 'results' => []];
+        }
+
+        return $this->executRollback($batches, 'full');
+    }
+
+    private function executRollback($batches, $type = 'partial')
+    {
+        $batchesPlaceholder = implode(',', array_fill(0, count($batches), '?'));
+
+        $sql = "
+            SELECT migration FROM " . self::MIGRATION_TABLE . " 
+            WHERE status = 'applied' AND batch IN ({$batchesPlaceholder}) 
+            ORDER BY executed_at DESC
+        ";
+
+        $stmt = $this->db->prepare($sql);
+
+        if (!$stmt) {
+            throw new Exception("Prepare failed: " . $this->db->error);
+        }
+
+        $stmt->bind_param(str_repeat('i', count($batches)), ...$batches);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $toRollback = [];
+        while ($row = $result->fetch_assoc()) {
+            $toRollback[] = $row['migration'] . '.php';
+        }
+        $stmt->close();
+
         $results = [];
-        foreach ($migrationsToRollback as $file) {
+        foreach ($toRollback as $file) {
+            $migrationName = pathinfo($file, PATHINFO_FILENAME);
             $result = $this->applyMigration($file, 0, 'down');
             $results[] = $result;
+
             if (!$result['success']) {
-                $this->log("Full rollback failed for {$file}. Aborting subsequent rollbacks.", 'error');
+                $this->log("Rollback failed for {$file}. Aborting remaining rollbacks.", 'error');
                 break;
             }
         }
-        
+
         $rolledBack = count(array_filter($results, fn($r) => $r['success']));
-        $this->log("Full rollback completed. Rolled back {$rolledBack} migrations.");
-        
-        return ['success' => true, 'message' => "Successfully rolled back ALL {$rolledBack} migrations.", 'rolled_back' => $rolledBack, 'results' => $results];
+        $typeStr = $type === 'full' ? 'Full rollback' : 'Rollback';
+        $this->log("{$typeStr} completed: {$rolledBack} migrations rolled back");
+
+        return [
+            'success' => true,
+            'message' => "Successfully rolled back {$rolledBack} migrations.",
+            'rolled_back' => $rolledBack,
+            'results' => $results
+        ];
     }
-    
-    // --- Backup & Restore ---
-    
-    public function backupDatabase() {
+
+    public function backupDatabase($backupName = null)
+    {
         $timestamp = date('Ymd_His');
-        $fileName = "backup_{$timestamp}.sql";
+        $backupName = $backupName ?? "backup_{$timestamp}";
+        $fileName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $backupName) . "_{$timestamp}.sql";
         $filePath = $this->backupsDir . '/' . $fileName;
-        
-        // This is a placeholder for a real backup script. 
-        // A robust solution would use shell commands like mysqldump or pg_dump.
-        // E.g., exec("mysqldump -h{$host} -u{$user} -p{$pass} {$dbName} > " . escapeshellarg($filePath));
-        
-        // For a simple PDO/mysqli implementation, we'll create a dummy file
-        // and log a warning that the dump command needs implementation.
-        
-        $warning = "-- WARNING: Actual database dump logic is a placeholder. 
--- Please implement a robust shell command like 'mysqldump' or 'pg_dump' 
--- in MigrationManager.php::backupDatabase() for production use.
 
--- DUMMY BACKUP FILE CREATED ON: {$timestamp}
--- TABLE: migrations
-SELECT * FROM migrations;
-";
-        file_put_contents($filePath, $warning);
+        try {
+            $dbName = $this->getDatabase();
+            $backupCmd = $this->buildBackupCommand($dbName, $filePath);
 
-        $this->log("Backup file created (DUMMY): $fileName");
-        return ['success' => true, 'file' => $fileName];
+            exec($backupCmd, $output, $return);
+            if ($return !== 0) {
+                throw new Exception("Backup command failed: " . implode("\n", $output));
+            }
+
+            if (!file_exists($filePath)) {
+                throw new Exception("Backup file not created at {$filePath}");
+            }
+
+            $size = filesize($filePath);
+            $this->log("Database backup created: {$fileName} (" . $this->formatBytes($size) . ")");
+
+            return ['success' => true, 'file' => $fileName, 'path' => $filePath, 'size' => $size];
+        } catch (Exception $e) {
+            $this->log("Backup failed: " . $e->getMessage(), 'error', $e);
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+    private function buildBackupCommand($dbName, $filePath)
+    {
+            global $db_env;
+
+        // Get connection details
+        $host = $db_env['DB_HOST'];
+        $user = $db_env['DB_USER'];
+        $pass = $db_env['DB_PASS'];
+
+        if (strpos($host, 'via TCP/IP') !== false) {
+            preg_match('/^.*via TCP\/IP.*:(\d+)/', $host, $matches);
+            $port = $matches[1] ?? 3306;
+        } else {
+            $port = 3306;
+        }
+
+        // Build mysqldump command
+        $cmd = "mariadb-dump --host={$host} --port={$port} --user={$user}";
+
+        if ($pass) {
+            $cmd .= " --password=" . escapeshellarg($pass);
+        }
+
+        // Ignore the migrations table
+        $cmd .= " --ignore-table=" . escapeshellarg("{$dbName}.migrations");
+
+        // Dump the whole database except migrations
+        $cmd .= " " . escapeshellarg($dbName) . " > " . escapeshellarg($filePath);
+
+        return $cmd;
     }
 
-    public function getBackups() {
-        $files = array_filter(scandir($this->backupsDir), fn($f) => pathinfo($f, PATHINFO_EXTENSION) === 'sql');
-        
-        // Sort by timestamp in filename to get latest first
-        rsort($files);
-        
+
+    private function getDatabase()
+    {
+        $result = $this->db->query("SELECT DATABASE() as db");
+        $row = $result->fetch_assoc();
+        return $row['db'] ?? throw new Exception("Cannot determine database name");
+    }
+
+    public function getBackups()
+    {
+        $files = @scandir($this->backupsDir) ?: [];
+        $backups = array_filter($files, fn($f) => pathinfo($f, PATHINFO_EXTENSION) === 'sql');
+
+        rsort($backups);
+
         return array_map(fn($f) => [
             'file' => $f,
             'path' => $this->backupsDir . '/' . $f,
             'size' => filesize($this->backupsDir . '/' . $f),
             'created' => filemtime($this->backupsDir . '/' . $f)
-        ], $files);
+        ], $backups);
     }
-    
-    public function restoreBackup($backupFile) {
+
+    public function restoreBackup($backupFile)
+    {
         if (!file_exists($backupFile)) {
-            throw new Exception("Backup file not found: " . $backupFile);
+            throw new Exception("Backup file not found: {$backupFile}");
         }
-        
-        // In a real application, you would use a tool like 'mysql' or 'psql' to restore the SQL file.
-        // For example: exec("mysql -h{$host} -u{$user} -p{$pass} {$dbName} < " . escapeshellarg($backupFile));
 
-        // For this simple version, we'll log a warning and return success.
-        $warning = "Database restoration attempted from: {$backupFile}. (NOTE: Actual database restore command is a placeholder in MigrationManager.php::restoreBackup())";
-        $this->log($warning, 'warn');
+        if (!is_readable($backupFile)) {
+            throw new Exception("Backup file not readable: {$backupFile}");
+        }
 
-        // Since we cannot execute arbitrary SQL files reliably with just mysqli/PDO without parsing,
-        // we'll simulate the operation success.
-        
-        return ['success' => true, 'message' => $warning];
+        try {
+            $dbName = $this->getDatabase();
+    global $db_env;
+
+            $host = $db_env['DB_HOST'] ?? 'localhost';
+            $user = $db_env['DB_USER'];
+            $pass = $db_env['DB_PASS'] ?? '';
+
+            // IMPORTANT:
+            // - Use sh -c so that shell redirection (< file.sql) works.
+            // - escapeshellarg() is used for safety.
+            // - Add --password= so MariaDB does not reject login.
+            $cmd = "mariadb "
+                . "--host=" . escapeshellarg($host) . " "
+                . "--user=" . escapeshellarg($user) . " "
+                . "--password=" . escapeshellarg($pass) . " "
+                . escapeshellarg($dbName)
+                . " < " . escapeshellarg($backupFile);
+
+            // Wrap inside sh -c
+            $restoreCmd = "sh -c " . escapeshellarg($cmd);
+
+            exec($restoreCmd . " 2>&1", $output, $return);
+
+            if ($return !== 0) {
+                throw new Exception("Restore failed: " . implode("\n", $output));
+            }
+
+            $this->appliedMigrationCache = [];
+            $this->log("Database restored from: " . basename($backupFile));
+
+            return ['success' => true, 'message' => 'Database restored successfully'];
+        } catch (Exception $e) {
+            $this->log("Restore failed: " . $e->getMessage(), 'error', $e);
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
     }
 
+    /**
+     * Returns the description (schema) of a specified database table.
+     *
+     * @param string $tableName The name of the table to describe.
+     * @return array An array of column descriptions.
+     * @throws Exception If the table name is invalid or the table is not found.
+     */
+    public function describeTable($tableName)
+    {
+        // Basic sanitization: Ensure the table name only contains alphanumeric characters and underscores.
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $tableName)) {
+            throw new Exception("Invalid table name '{$tableName}'.");
+        }
 
-    // --- Internal Helpers ---
+        // Use SHOW COLUMNS FROM for broad MySQL/MariaDB compatibility
+        $sql = "SHOW COLUMNS FROM `{$tableName}`";
 
-    private function getMigrationFiles() {
-        // Find all .php files that match the timestamp naming convention
-        $files = array_filter(scandir($this->migrationsDir), function($f) {
-            return preg_match('/^\d{14}_.*\.php$/', $f);
+        try {
+            // Assuming $this->db is a MySQLi connection object
+            $result = $this->db->query($sql);
+
+            if ($result && $result->num_rows > 0) {
+                $description = $result->fetch_all(MYSQLI_ASSOC);
+                $result->free();
+                return $description;
+            }
+
+            // If the query worked but returned 0 rows, the table likely doesn't exist
+            if (!$result || $this->db->errno) {
+                throw new Exception("Database error: " . $this->db->error);
+            }
+
+            throw new Exception("Table '{$tableName}' not found or has no columns.");
+        } catch (Exception $e) {
+            // Re-throw exception to be caught by CLI handler
+            throw $e;
+        }
+    }
+    public function getLogs($days = 7)
+    {
+        $logs = [];
+        $now = time();
+
+        for ($i = 0; $i < $days; $i++) {
+            $date = date('Y-m-d', $now - ($i * 86400));
+            $logFile = $this->logsDir . '/' . $date . '.log';
+
+            if (file_exists($logFile) && is_readable($logFile)) {
+                $logs[$date] = file_get_contents($logFile);
+            }
+        }
+
+        return $logs;
+    }
+
+    private function getMigrationFiles()
+    {
+        $files = @scandir($this->migrationsDir) ?: [];
+
+        $migrations = array_filter($files, function ($f) {
+            return preg_match(self::MIGRATION_PATTERN, $f) && is_file($this->migrationsDir . '/' . $f);
         });
 
-        // Sort them chronologically by filename (timestamp)
-        sort($files);
-        return $files;
+        sort($migrations);
+        return array_values($migrations);
+    }
+
+    private function extractClassName($filePath)
+    {
+        $content = file_get_contents($filePath);
+
+        if (preg_match('/class\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*{/', $content, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    private function formatBytes($bytes)
+    {
+        $units = ['B', 'KB', 'MB', 'GB'];
+        $bytes = max($bytes, 0);
+        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = min($pow, count($units) - 1);
+        $bytes /= (1 << (10 * $pow));
+
+        return round($bytes, 2) . ' ' . $units[$pow];
+    }
+
+    // Public getters for CLI
+    public function getLogsDir()
+    {
+        return $this->logsDir;
+    }
+
+    public function getMigrationsDir()
+    {
+        return $this->migrationsDir;
+    }
+
+    public function getBackupsDir()
+    {
+        return $this->backupsDir;
     }
 }

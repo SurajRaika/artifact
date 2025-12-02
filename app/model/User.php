@@ -62,7 +62,7 @@ class User
         $this->redirectWithError('./register.php');
     }
 
-    public function login($email, $password)
+   public function login($email, $password)
     {
         $sql = "SELECT id, username, email, password FROM users WHERE email = ?";
         $stmt = mysqli_prepare($this->link, $sql);
@@ -76,16 +76,29 @@ class User
                 mysqli_stmt_bind_result($stmt, $id, $username, $email, $hashed_password);
                 mysqli_stmt_fetch($stmt);
 
+                // Ensure we have a valid hash string before verifying
+                if (!is_string($hashed_password) || $hashed_password === '') {
+                    return "The email or password you entered is incorrect.";
+                }
+
                 if (password_verify($password, $hashed_password)) {
+                    // Start or regenerate session *before* setting variables
+                    if (session_status() == PHP_SESSION_NONE) {
+                        session_start();
+                    }
                     session_regenerate_id(true);
+                    
+                    // Set session variables
                     $_SESSION["id"] = $id;
                     $_SESSION["username"] = $username;
                     $_SESSION["email"] = $email;
-
-                    
                     $_SESSION["loggedin"] = true;
+                    
+                    // Set the message cookie
+                    setcookie('message', 'Login successful.', time() + 600, '/');
                     setcookie('JustLogged', true, time() + 600, '/');
-                    $this->redirect('./',"Login successful.");
+
+                    return null; // <-- Success: Return null
                 } else {
                     return "The email or password you entered is incorrect.";
                 }
@@ -94,10 +107,12 @@ class User
             }
         }
 
+        // Fatal Error: Redirect with error, as original code did
         $this->redirectWithError('./authenticate');
+        return "Internal error during login process."; // Fallback, though redirectWithError exits
     }
 
-    private function redirect($location,$message)
+  private function redirect($location,$message) // Keep redirect for register
     {
         //store message in session so that when  user go to new location there we can show that message notification
         setcookie('message', $message, time() + 600, '/');
