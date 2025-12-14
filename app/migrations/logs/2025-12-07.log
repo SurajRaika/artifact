@@ -1,0 +1,16 @@
+[2025-12-07 14:26:29] [info] Migration created: 20251207_142629_AddDefaultCreditToUsers.php
+[2025-12-07 14:30:05] [info] Migration batch 2 completed: 1 migrations applied
+[2025-12-07 14:30:14] [info] Migration batch 2 completed: 1 migrations applied
+[2025-12-07 14:34:03] [info] Migration batch 2 completed: 1 migrations applied
+[2025-12-07 14:36:08] [info] Migration batch 2 completed: 1 migrations applied
+[2025-12-07 14:36:26] [success] Executed 20251207_142629_AddDefaultCreditToUsers->up() in 0ms
+[2025-12-07 14:36:26] [info] Migration batch 2 completed: 1 migrations applied
+[2025-12-07 14:36:32] [info] Migration created: 20251207_143632_Users.php
+[2025-12-07 14:44:46] [success] Executed 20251207_142629_AddDefaultCreditToUsers->down() in 0ms
+[2025-12-07 14:44:46] [info] Rollback completed: 1 migrations
+[2025-12-07 15:57:22] [success] Executed 20251207_142629_AddDefaultCreditToUsers->up() in 0ms
+[2025-12-07 15:57:22] [info] Migration batch 2 completed: 1 migrations applied
+[2025-12-07 16:01:23] [success] Executed 20251207_142629_AddDefaultCreditToUsers->down() in 594ms
+[2025-12-07 16:01:23] [info] Rollback completed: 1 migrations
+[2025-12-07 16:01:38] [success] Executed 20251207_142629_AddDefaultCreditToUsers->up() in 347ms
+[2025-12-07 16:01:38] [info] Migration batch 2 completed: 1 migrations applied

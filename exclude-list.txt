@@ -1,0 +1,38 @@
+# Node modules (never upload)
+node_modules/*
+
+# Composer vendor (if server installs dependencies itself)
+vendor/*
+
+# Version control & meta
+.git/*
+.gitignore
+
+# Local environment
+.env
+.env.*
+
+# Local OS/system files
+.DS_Store
+Thumbs.db
+
+# Migration logs & backups (private)
+app/migrations/logs/*
+app/migrations/backups/*
+app/env.php
+
+# Temporary/backup files
+*.log
+*.tmp
+*.sql
+*.bak
+
+# Documentation & local notes
+Database Migration System - Complete Guide.md
+redme.md
+
+# Do not upload local test files
+test.html
+
+# The lftp exclude file itself
+exclude-list.txt

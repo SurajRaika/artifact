@@ -1,0 +1,61 @@
+[2025-12-06 03:39:27] [info] Migration batch 1 completed: 1 migrations applied
+[2025-12-06 03:39:45] [info] Database backup created: pre_migrate_web_0339.sql (2.38 KB)
+[2025-12-06 03:39:46] [success] Executed 20251202_164226_Modifyuserdb->up() in 203ms
+[2025-12-06 03:39:46] [info] Migration batch 1 completed: 1 migrations applied
+[2025-12-06 03:40:22] [info] Database backup created: optionsal.sql (2.44 KB)
+[2025-12-06 03:40:51] [info] Migration created: 20251206_034051_Sadfsafd.php
+[2025-12-06 03:50:06] [info] Database backup created: pre_migrate_web_0350.sql (2.44 KB)
+[2025-12-06 03:50:06] [success] Executed 20251206_034051_Sadfsafd->up() in 39ms
+[2025-12-06 03:50:06] [info] Migration batch 2 completed: 1 migrations applied
+[2025-12-06 03:50:30] [success] Executed 20251206_034051_Sadfsafd->down() in 36ms
+[2025-12-06 03:50:30] [success] Executed 20251202_164226_Modifyuserdb->down() in 335ms
+[2025-12-06 03:50:30] [info] Rollback completed: 2 migrations
+[2025-12-06 04:01:21] [info] No applied migrations to rollback
+[2025-12-06 04:01:27] [info] Database backup created: pre_migrate_web_20251206_040127.sql (2.38 KB)
+[2025-12-06 04:01:28] [success] Executed 20251202_164226_Modifyuserdb->up() in 383ms
+[2025-12-06 04:01:28] [info] Migration batch 1 completed: 1 migrations applied
+[2025-12-06 04:01:41] [info] Migration created: 20251206_040141_Sadfsafd.php
+[2025-12-06 04:01:47] [info] Database backup created: pre_migrate_web_20251206_040147.sql (2.44 KB)
+[2025-12-06 04:01:47] [success] Executed 20251206_040141_Sadfsafd->up() in 41ms
+[2025-12-06 04:01:47] [info] Migration batch 2 completed: 1 migrations applied
+[2025-12-06 04:02:01] [success] Executed 20251206_040141_Sadfsafd->down() in 41ms
+[2025-12-06 04:02:01] [info] Rollback completed: 1 migrations
+[2025-12-06 04:06:03] [info] Migration created: 20251206_040603_Df.php
+[2025-12-06 04:06:07] [info] Database backup created: pre_migrate_web_20251206_040607.sql (2.44 KB)
+[2025-12-06 04:06:07] [success] Executed 20251206_040141_Sadfsafd->up() in 34ms
+[2025-12-06 04:06:07] [success] Executed 20251206_040603_Df->up() in 34ms
+[2025-12-06 04:06:07] [info] Migration batch 2 completed: 2 migrations applied
+[2025-12-06 04:06:16] [success] Executed 20251206_040141_Sadfsafd->down() in 42ms
+[2025-12-06 04:06:16] [success] Executed 20251206_040603_Df->down() in 34ms
+[2025-12-06 04:06:16] [info] Rollback completed: 2 migrations
+[2025-12-06 08:09:18] [info] Database backup created: pre_migrate_web_20251206_080917.sql (2.44 KB)
+[2025-12-06 08:09:18] [success] Executed 20251202_164226_CreateUsersTable->up() in 35ms
+[2025-12-06 08:09:18] [info] Migration batch 1 completed: 1 migrations applied
+[2025-12-06 08:27:02] [info] Database backup created: pre_migrate_web_20251206_082702.sql (1.31 KB)
+[2025-12-06 08:27:03] [success] Executed 20251202_164226_CreateUsersTable->up() in 358ms
+[2025-12-06 08:27:03] [info] Migration batch 1 completed: 1 migrations applied
+[2025-12-06 08:29:26] [info] Database backup created: pre_migrate_web_20251206_082925.sql (1.31 KB)
+[2025-12-06 08:29:26] [success] Executed 20251202_164226_CreateUsersTable->up() in 373ms
+[2025-12-06 08:29:26] [info] Migration batch 1 completed: 1 migrations applied
+[2025-12-06 08:29:30] [info] Database backup created: pre_migrate_web_20251206_082930.sql (2.27 KB)
+[2025-12-06 08:29:30] [info] No pending migrations
+[2025-12-06 08:29:54] [info] Database backup created: pre_migrate_web_20251206_082954.sql (2.27 KB)
+[2025-12-06 08:29:54] [info] No pending migrations
+[2025-12-06 08:30:29] [info] Database backup created: pre_migrate_web_20251206_083029.sql (2.27 KB)
+[2025-12-06 08:30:29] [info] No pending migrations
+[2025-12-06 08:32:20] [info] Database backup created: pre_migrate_web_20251206_083220.sql (2.27 KB)
+[2025-12-06 08:32:20] [info] No pending migrations
+[2025-12-06 08:32:21] [info] Database backup created: pre_migrate_web_20251206_083221.sql (2.27 KB)
+[2025-12-06 08:32:21] [info] No pending migrations
+[2025-12-06 08:32:22] [info] Database backup created: pre_migrate_web_20251206_083222.sql (2.27 KB)
+[2025-12-06 08:32:22] [info] No pending migrations
+[2025-12-06 08:32:34] [info] Database backup created: pre_migrate_web_20251206_083234.sql (2.27 KB)
+[2025-12-06 08:32:34] [info] No pending migrations
+[2025-12-06 08:33:08] [info] Database backup created: pre_migrate_web_20251206_083308.sql (2.27 KB)
+[2025-12-06 08:33:08] [info] No pending migrations
+[2025-12-06 08:36:21] [info] Database backup created: pre_migrate_web_20251206_083621.sql (2.27 KB)
+[2025-12-06 08:36:21] [success] Executed 20251202_164226_CreateUsersTable->up() in 37ms
+[2025-12-06 08:36:21] [info] Migration batch 1 completed: 1 migrations applied
+[2025-12-06 08:36:26] [info] Database backup created: pre_migrate_web_20251206_083626.sql (2.27 KB)
+[2025-12-06 08:36:26] [info] No pending migrations
+[2025-12-06 17:46:47] [info] Migration created: 20251206_174647_AddFreeMoneyAvailUserModel.php

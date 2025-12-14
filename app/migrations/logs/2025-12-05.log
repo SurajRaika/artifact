@@ -1,0 +1,6 @@
+[2025-12-05 16:21:29] [success] Executed 20251202_164226_Modifyuserdb->down() in 597ms
+[2025-12-05 16:21:29] [info] Rollback completed: 1 migrations
+[2025-12-05 16:21:35] [info] No applied migrations to rollback
+[2025-12-05 16:21:45] [info] No applied migrations to rollback
+[2025-12-05 16:21:47] [info] No applied migrations to rollback
+[2025-12-05 16:21:49] [info] No applied migrations to rollback

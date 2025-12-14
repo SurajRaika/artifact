@@ -1,0 +1,32 @@
+[2025-12-08 04:19:59] [info] Migration created: 20251208_041959_CreateArtifact.php
+[2025-12-08 05:02:48] [error] Failed 20251208_041959_CreateArtifact->up: You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'column
+        FOREIGN KEY (seller_id) REFERENCES users(id),
+        created_...' at line 5 | Exception: You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'column
+        FOREIGN KEY (seller_id) REFERENCES users(id),
+        created_...' at line 5
+[2025-12-08 05:34:57] [error] Failed 20251208_041959_CreateArtifact->up: You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'column
+        FOREIGN KEY (seller_id) REFERENCES users(id),
+        created_...' at line 5 | Exception: You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'column
+        FOREIGN KEY (seller_id) REFERENCES users(id),
+        created_...' at line 5
+[2025-12-08 05:34:57] [warn] Migration halted due to failure in 20251208_041959_CreateArtifact.php
+[2025-12-08 05:34:57] [info] Migration batch 3 completed: 0 migrations applied
+[2025-12-08 05:37:50] [error] Failed 20251208_041959_CreateArtifact->up: Can't create table `artifact_data_base`.`artifacts` (errno: 150 "Foreign key constraint is incorrectly formed") | Exception: Can't create table `artifact_data_base`.`artifacts` (errno: 150 "Foreign key constraint is incorrectly formed")
+[2025-12-08 05:37:50] [warn] Migration halted due to failure in 20251208_041959_CreateArtifact.php
+[2025-12-08 05:37:50] [info] Migration batch 3 completed: 0 migrations applied
+[2025-12-08 05:38:53] [error] Failed 20251208_041959_CreateArtifact->up: Can't create table `artifact_data_base`.`artifacts` (errno: 150 "Foreign key constraint is incorrectly formed") | Exception: Can't create table `artifact_data_base`.`artifacts` (errno: 150 "Foreign key constraint is incorrectly formed")
+[2025-12-08 05:38:53] [warn] Migration halted due to failure in 20251208_041959_CreateArtifact.php
+[2025-12-08 05:38:53] [info] Migration batch 3 completed: 0 migrations applied
+[2025-12-08 05:40:28] [success] Executed 20251208_041959_CreateArtifact->up() in 268ms
+[2025-12-08 05:40:28] [info] Migration batch 3 completed: 1 migrations applied
+[2025-12-08 17:40:54] [info] Rollback completed: 0 migrations
+[2025-12-08 17:41:11] [info] Rollback completed: 0 migrations
+[2025-12-08 17:41:34] [info] Rollback completed: 0 migrations
+[2025-12-08 17:42:17] [info] Rollback completed: 0 migrations
+[2025-12-08 17:45:50] [info] Migration created: 20251208_174550_AddVisibilityAndVerifiedToArtifacts.php
+[2025-12-08 17:46:12] [success] Executed 20251208_174550_AddVisibilityAndVerifiedToArtifacts->up() in 442ms
+[2025-12-08 17:46:12] [info] Migration batch 4 completed: 1 migrations applied
+[2025-12-08 17:46:18] [info] Rollback completed: 0 migrations
+[2025-12-08 17:47:06] [info] Rollback completed: 0 migrations
+[2025-12-08 17:50:02] [success] Executed 20251208_174550_AddVisibilityAndVerifiedToArtifacts->down() in 349ms
+[2025-12-08 17:50:02] [info] Rollback completed: 1 migrations
