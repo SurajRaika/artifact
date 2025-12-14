@@ -1,21 +1,22 @@
 <?php
-// components/bidding-terminal.php
+// components/item-detail-panel.php
 
-// Mock data (keep local for terminal rendering)
-// NOTE: In a real app, this should be included/fetched from a shared state/DB
+// Mock data (Modified for a Handicrafts Marketplace - Added images array)
+
+// Define a simulated user credit balance (e.g., 5000 INR)
+$user_credit = 0; 
 ?>
 
-<aside id="bidding_terminal" onclick="expandTerminal()" 
-    class="md:w-64 lg:w-96  w-full bg-white shadow-lg border-t-8 md:border-t-0 md:border-l-2 border-black overflow-y-auto shrink-0 z-20 md:z-10 flex flex-col absolute md:static  bottom-0 left-0 transition-all duration-300 ease-in-out h-[0%] md:h-full cursor-pointer">
-    
+<aside id="bidding_terminal" onclick="expandTerminal()"
+    class="md:w-64 lg:w-96 w-full bg-white shadow-lg border-t-8 md:border-t-0 md:border-l-2 border-black overflow-y-auto shrink-0 z-20 md:z-10 flex flex-col absolute md:static bottom-0 left-0 transition-all duration-300 ease-in-out h-[0%] md:h-full cursor-pointer">
+
     <div id="empty-terminal"
         class="flex flex-col items-center justify-center h-full p-8 text-center bg-gray-50">
         <i data-lucide="scan" class="w-12 h-12 text-gray-400 mb-4"></i>
-        <h3 class="font-bold text-lg uppercase mb-2">Bidding Terminal</h3>
-        <p class="text-sm text-gray-500 font-mono">Select an artifact from the list to view live details and
-            place a bid.</p>
+        <h3 class="font-bold text-lg uppercase mb-2">Item Detail Panel</h3>
+        <p class="text-sm text-gray-500 font-mono">Select an item from the list to view full details and purchase options.</p>
         <div class="mt-4 p-2 bg-white brutalist-border-b text-xs font-mono">
-            Session ID: <span class="font-bold">2025-Q4-ALPHA-01</span>
+            Market ID: <span class="font-bold">2025-Q4-ALPHA-01</span>
         </div>
     </div>
 
@@ -23,64 +24,119 @@
         <div class="space-y-4">
             <div class="flex justify-between items-start border-b-2 border-black pb-2">
                 <div>
-                    <span id="terminal-lot" class="text-sm font-mono uppercase text-gray-500">LOT XXX</span>
-                    <h2 id="terminal-title" class="text-xl font-bold uppercase leading-tight">Artifact Title Here</h2>
+                    <span id="terminal-lot" class="text-sm font-mono uppercase text-gray-500">ITEM XXX</span>
+                    <h2 id="terminal-title" class="text-xl font-bold uppercase leading-tight">Handicraft Title Here</h2>
                     <p id="terminal-category" class="text-xs font-mono text-gray-600 mt-1"></p>
                 </div>
-                
-                <button onclick="event.stopPropagation(); clearSelection()" title="Close Terminal"
+                <button onclick="event.stopPropagation(); clearSelection()" title="Close Panel"
                     class="w-6 h-6 text-gray-500 hover:text-black z-30 relative md:hidden">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
 
-            <div class="w-full h-40 border-2 border-dashed border-gray-300 bg-gray-100 flex items-center justify-center mb-4">
-                <i data-lucide="camera-off" class="w-8 h-8 text-gray-400"></i>
-            </div>
+            <div id="terminal-image-slider"
+                x-data="{ 
+                    activeImage: 0, 
+                    images: [],
+                    init() {
+                        // Listen for the custom event from Vanilla JS
+                        window.addEventListener('update-terminal-images', (e) => {
+                            this.images = e.detail || [];
+                            this.activeImage = 0;
+                        });
+                    },
+                    next() {
+                        this.activeImage = (this.activeImage === this.images.length - 1) ? 0 : this.activeImage + 1;
+                    },
+                    prev() {
+                        this.activeImage = (this.activeImage === 0) ? this.images.length - 1 : this.activeImage - 1;
+                    }
+                }"
+                class="relative w-full brutalist-border-b border-black mb-4 select-none">
 
-            <div class="grid grid-cols-2 gap-4">
-                <div class="p-3 brutalist-border bg-gray-50">
-                    <div class="text-[10px] uppercase font-bold text-gray-500">Current High Bid</div>
-                    <div id="terminal-current-bid" class="font-bold text-2xl font-mono text-black mt-1">$0</div>
+                <div class="h-64 overflow-hidden relative bg-gray-100">
+
+                    <template x-for="(img, index) in images" :key="index">
+                        <div x-show="activeImage === index"
+                            x-transition:enter="transition ease-out duration-300"
+                            x-transition:enter-start="opacity-0 scale-95"
+                            x-transition:enter-end="opacity-100 scale-100"
+                            x-transition:leave="transition ease-in duration-200"
+                            x-transition:leave-start="opacity-100 scale-100"
+                            x-transition:leave-end="opacity-0 scale-95"
+                            class="absolute inset-0 w-full h-full">
+                            <img :src="img" class="w-full h-full object-contain">
+                        </div>
+                    </template>
+
+                    <div x-show="images.length === 0" class="absolute inset-0 flex items-center justify-center text-gray-400">
+                        <div class="text-center">
+                            <i data-lucide="image-off" class="w-8 h-8 mx-auto mb-2"></i>
+                            <span class="text-xs font-mono">No Preview</span>
+                        </div>
+                    </div>
+
+                    <div x-show="images.length > 1" class="absolute inset-0 flex items-center justify-between p-2 pointer-events-none">
+                        <button @click.stop="prev()"
+                            class="bg-white/80 hover:bg-white text-black p-2 border-2 border-black pointer-events-auto transition-transform active:scale-95 shadow-lg">
+                            <i data-lucide="chevron-left" class="w-5 h-5"></i>
+                        </button>
+
+                        <button @click.stop="next()"
+                            class="bg-white/80 hover:bg-white text-black p-2 border-2 border-black pointer-events-auto transition-transform active:scale-95 shadow-lg">
+                            <i data-lucide="chevron-right" class="w-5 h-5"></i>
+                        </button>
+                    </div>
                 </div>
-                <div class="p-3 brutalist-border bg-gray-50">
-                    <div class="text-[10px] uppercase font-bold text-gray-500">Time Remaining</div>
-                    <div id="terminal-time-left" class="font-bold text-2xl font-mono text-red-600 mt-1">00:00:00</div>
+
+                <div x-show="images.length > 1" class="flex justify-center space-x-2 p-2 bg-white border-t-2 border-black">
+                    <template x-for="(img, index) in images" :key="index">
+                        <button @click.stop="activeImage = index"
+                            :class="activeImage === index ? 'bg-black w-4' : 'bg-gray-300 w-2 hover:bg-gray-400'"
+                            class="h-2 rounded-none transition-all duration-300"></button>
+                    </template>
                 </div>
             </div>
+            <div id="terminal-time-left" class="font-semibold text-lg font-mono text-gray-700 mb-0">2025-07-28</div>
 
-            <div>
-                <h4 class="font-bold uppercase text-sm mt-4 mb-2 border-b border-gray-200 pb-1">Bidding History (3 Latest)</h4>
-                <ul id="terminal-history" class="text-xs font-mono space-y-1">
-                </ul>
+            <p id="terminal-description" class="text-sm text-gray-700 font-mono italic leading-relaxed"></p>
+            <div class="space-y-4">
+                <div class="p-3 brutalist-border bg-gray-50">
+                    <div class="text-[10px] uppercase font-bold text-gray-500">Price</div>
+                    <div id="terminal-current-bid" class="font-bold text-2xl font-mono text-black mt-1">₹8,800</div>
+                </div>
+
+
             </div>
         </div>
     </div>
 
     <div id="bid-footer" onclick="event.stopPropagation()" class="p-4 md:p-6 brutalist-border-t bg-gray-100 shrink-0 hidden cursor-auto">
-        <div class="flex items-center justify-between mb-3">
-            <div class="text-xs uppercase font-bold text-gray-500">Minimum Next Bid</div>
-            <div id="terminal-min-bid" class="font-bold text-lg font-mono text-black">$5,000</div>
-        </div>
-
-        <input type="number" id="bid-input" placeholder="Enter your bid"
-            onkeydown="if(event.key === 'Enter') placeBid()"
-            class="w-full px-3 py-2 border-2 border-black font-mono text-lg focus:outline-none focus:ring-2 focus:ring-black mb-3">
-        <button onclick="placeBid()"
-            class="w-full bg-red-600 text-white py-3 font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-all brutalist-shadow brutalist-active border-2 border-black">
-            Place Bid
+        <button onclick="buyNow(<?= $user_credit ?>)"
+            class="w-full bg-green-600 text-white py-3 font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-all brutalist-shadow brutalist-active border-2 border-black">
+            Buy Now
         </button>
     </div>
 </aside>
 
 <script>
-    console.log("Bidding terminal loaded");
+    // Note: The artifacts array is defined in the PHP block.
 
-    // NEW FUNCTION: Expands terminal when clicked, but only if it's in "peek" (40%) mode
+    console.log("Item detail panel loaded");
+
+    function formatRupeesJS(amount) {
+        if (typeof Intl === 'object' && Intl.NumberFormat) {
+            return new Intl.NumberFormat('en-IN', {
+                style: 'currency',
+                currency: 'INR',
+                minimumFractionDigits: 0
+            }).format(amount);
+        }
+        return '₹' + amount.toLocaleString('en-IN');
+    }
+
     function expandTerminal() {
         const biddingTerminal = document.getElementById('bidding_terminal');
-        
-        // We check inline style. If it is exactly 40%, we expand it.
         if (biddingTerminal.style.height === "40%") {
             biddingTerminal.style.height = "100%";
         }
@@ -95,9 +151,12 @@
             details.classList.add('hidden');
             footer.classList.add('hidden');
             emptyState.classList.remove('hidden');
-            const bidInput = document.getElementById('bid-input');
-            if (bidInput) bidInput.value = '';
-            
+
+            // Reset Slider to empty
+            window.dispatchEvent(new CustomEvent('update-terminal-images', {
+                detail: []
+            }));
+
             const existingOverlay = document.getElementById('terminal-overlay');
             if (existingOverlay) existingOverlay.remove();
             return;
@@ -110,67 +169,53 @@
         details.classList.remove('hidden');
         footer.classList.remove('hidden');
 
-        // Populate main details
+        // Populate Text Details
         document.getElementById('terminal-lot').textContent = artifact.lot;
         document.getElementById('terminal-title').textContent = artifact.title;
         document.getElementById('terminal-category').textContent = `Category: ${artifact.category.toUpperCase()}`;
-        document.getElementById('terminal-current-bid').textContent = formatter.format(artifact.currentBid);
-        document.getElementById('terminal-time-left').textContent = formatTime(artifact.time);
+        document.getElementById('terminal-current-bid').textContent = formatRupeesJS(artifact.price);
+        document.getElementById('terminal-time-left').textContent = artifact.dateOfCreation;
+        document.getElementById('terminal-description').textContent = artifact.description;
 
-        const minNextBid = artifact.currentBid + 5000;
-        document.getElementById('terminal-min-bid').textContent = formatter.format(minNextBid);
+        // --- UPDATE SLIDER ---
+        // We dispatch an event that the Alpine component is listening for.
+        // This is much cleaner than injecting HTML strings.
+        window.dispatchEvent(new CustomEvent('update-terminal-images', {
+            detail: artifact.images || []
+        }));
 
-        const bidInput = document.getElementById('bid-input');
-        bidInput.value = minNextBid;
-        bidInput.min = minNextBid;
-
-        const historyList = document.getElementById('terminal-history');
-        historyList.innerHTML = '';
-        artifact.bids.slice(0, 3).forEach(bid => { 
-            const historyHtml = `
-            <li class="flex justify-between">
-                <span>${formatter.format(bid.amount)}</span>
-                <span class="text-gray-400">${bid.user} (${bid.time})</span>
-            </li>`;
-            historyList.insertAdjacentHTML('beforeend', historyHtml);
-        });
-
-        lucide.createIcons();
+        // Re-initialize icons for any new content (mostly static now, but good practice)
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
     }
 
-    selectArtifact = function(id) {
+    selectArtifact = function(el,id) {
+            document.querySelectorAll('.selected-artifact')
+        .forEach(e => e.classList.remove('selected-artifact'));
+
+    // add class to the clicked element
+    el.classList.add('selected-artifact');
+        // add this class to the element which called the selectArtifact func  selected-artifact
         const biddingTerminal = document.getElementById('bidding_terminal');
         const layoutMain = document.getElementById('layout_main');
-        
-        // If clicking the same item that is already open...
+
         if (id === selectedArtifactId) {
-            // If it is currently minimized to 40%, expand it
             if (biddingTerminal.style.height === "40%") {
                 biddingTerminal.style.height = "100%";
                 return;
             }
-            // If it is already 100%, we do nothing (or we could collapse, but UX usually prefers staying open)
-            // If you want toggle behavior on the list click, uncomment below:
-            /*
-            else if (biddingTerminal.style.height === "100%") {
-                 biddingTerminal.style.height = "40%";
-                 return;
-            }
-            */
         }
-        
+
         selectedArtifactId = id;
 
-        // Reset to initial "Peek" state
-          if (biddingTerminal.style.height === "0%") {
-        biddingTerminal.style.height = "40%";
-                return;
-            }
-
+        if (biddingTerminal.style.height === "0%") {
+            biddingTerminal.style.height = "40%";
+        }
 
         biddingTerminal.style.opacity = "1";
 
-        // Create overlay
+        // Overlay Logic
         if (layoutMain && layoutMain.classList.contains('relative')) {
             let overlay = document.getElementById('terminal-overlay');
             if (!overlay) {
@@ -182,8 +227,8 @@
                     left: '0',
                     width: '100%',
                     height: '100%',
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)', 
-                    zIndex: '10', 
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    zIndex: '10',
                     cursor: 'pointer'
                 });
                 overlay.addEventListener('click', (event) => {
@@ -194,7 +239,7 @@
                 layoutMain.appendChild(overlay);
             }
         }
-        
+
         renderTerminal();
     }
 
@@ -204,78 +249,63 @@
 
         biddingTerminal.style.height = "0%";
         biddingTerminal.style.opacity = "0";
-        
-        if (existingOverlay) {
-            existingOverlay.remove();
-        }
+
+        if (existingOverlay) existingOverlay.remove();
 
         selectedArtifactId = null;
-        if (currentView === 'live-auctions' && typeof renderArtifacts === 'function') {
-            renderArtifacts(currentFilter);
-        }
-        renderTerminal(); 
+        renderTerminal();
     }
 
-    function placeBid() {
+    /**
+     * Attempts to purchase the selected artifact with a credit check.
+     * @param {number} userCredit The simulated credit balance of the user.
+     */
+    function buyNow(userCredit) {
         if (!selectedArtifactId) return;
-
-        const bidInput = document.getElementById('bid-input');
-        const newBidAmount = parseFloat(bidInput.value);
         const artifact = artifacts.find(a => a.id === selectedArtifactId);
-        const minBid = artifact.currentBid + 5000;
-
-        if (isNaN(newBidAmount) || newBidAmount < minBid) {
-            showToast(`Bid must be at least ${formatter.format(minBid)}!`, 'alert-triangle', 'red');
-            return;
-        }
-
-        if (availableFunds < newBidAmount) {
-            showToast(`Error: Insufficient funds!`, 'x-circle', 'red');
-            return;
-        }
 
         const btn = document.querySelector('#bid-footer button');
         const oldText = btn.innerText;
-        btn.innerText = "VERIFYING BID...";
+        btn.innerText = "PROCESSING...";
         btn.disabled = true;
 
         setTimeout(() => {
-            availableFunds -= newBidAmount;
-            transactions.unshift({
-                id: Date.now(),
-                type: 'BID PLACED',
-                amount: -newBidAmount,
-                date: new Date().toISOString().slice(0, 10),
-                lot: artifact.id
-            });
+            const artifactPrice = artifact.price; // Assuming the price is in the artifact object
 
-            const currentUserId = 'User:D9F3';
-            artifact.currentBid = newBidAmount;
-            artifact.bids.unshift({
-                amount: newBidAmount,
-                user: currentUserId,
-                time: 'Just now',
-            });
+            // --- SIMULATED CREDIT CHECK LOGIC ---
+            if (artifactPrice > userCredit) {
+                // Insufficient Funds - ERROR Scenario
+                const formattedPrice = formatRupeesJS(artifactPrice);
+                const formattedCredit = formatRupeesJS(userCredit);
+                
+                const errorMessage = `Purchase failed for ${artifact.title}. Insufficient funds! Item price is ${formattedPrice}, but your credit is only ${formattedCredit}.`;
+                
+                // Use showToast for error if available, otherwise alert
+                if (typeof showToast === 'function') {
+                    // Assuming showToast supports an error/red style
+                    showToast(errorMessage, 'alert-octagon', 'red'); 
+                } else {
+                    alert(errorMessage);
+                }
+                
+                // Do NOT clear selection or close the panel on failure
+                btn.innerText = oldText; // Restore button text
+                btn.disabled = false; // Enable button for re-try
+                
+            } else {
+                // Purchase Successful - SUCCESS Scenario (Original Logic)
+                if (typeof showToast === 'function') {
+                    showToast(`Purchase initiated for ${artifact.title}`, 'package', 'green');
+                } else {
+                    alert(`Purchase initiated for ${artifact.title}`);
+                }
 
-            showToast(`Bid Placed: ${formatter.format(newBidAmount)} on Lot ${artifact.lot}`, 'gavel', 'green');
-
-            animateFundsDeduction();
-            updateFundsDisplay();
-
-            if (typeof renderArtifacts === 'function') {
-                renderArtifacts(currentFilter);
+                // Clear selection and restore button state on success
+                clearSelection();
+                btn.innerText = oldText;
+                btn.disabled = false;
             }
-            renderTerminal();
 
-            btn.innerText = oldText;
-            btn.disabled = false;
-        }, 1500);
-    }
-
-    function manageBid(id, status) {
-        const artifact = artifacts.find(a => a.id === id);
-        if (!artifact) return;
-        window.event.stopPropagation();
-        showToast(`Opening Proxy Manager for Lot ${artifact.lot || id}.`, 'settings-2', 'blue');
+        }, 1500); // Simulate network delay
     }
 </script>

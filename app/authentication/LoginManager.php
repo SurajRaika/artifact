@@ -2,7 +2,7 @@
 // app/authentication/LoginManager.php (Updated)
 
 // Define variables and initialize with empty values
-$user_email_err = $password_err = $login_err = ""; // Renamed $user_password_err to $password_err
+$user_email_err = $user_password_err = $login_err = ""; // Renamed $user_password_err to $user_password_err
 $user_email = $password = ""; // Renamed $user_password to $password
 
 // Processing form data when form is submitted
@@ -17,13 +17,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
   // 2. Validate Password (The input name is 'password', not 'user_password')
   if (empty(trim($_POST["password"]))) { // Check the correct input name
-    $password_err = "Please enter your password.";
+    $user_password_err = "Please enter your password.";
   } else {
     $password = trim($_POST["password"]); // Set the correct variable name
   }
 
  // 3. Validate credentials 
-  if (empty($user_email_err) && empty($password_err)) {
+  if (empty($user_email_err) && empty($user_password_err)) {
     // Assuming a User class exists with a login method
     // NOTE: This file should probably start a session, but User.php now handles starting it on success.
     // For robust design, session_start() should be in a global config or index.php.

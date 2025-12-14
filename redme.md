@@ -12,8 +12,4 @@ DB_USER=root
 DB_PASS=your_password
 
 
-
-mirror -R \
-  --exclude-from=exclude-list.txt \
-  --only-newer \
-  .  /htdocs
+mirror -R --only-newer --exclude-glob-from=exclude-list.txt . /htdocs
